@@ -4,7 +4,15 @@ Universal Smart Reminder, Lunar Calendar & To-Do Checklist Assistant for DSH Web
 
 [中文文档](./README.md) | [Documentación en Español](./README.es.md)
 
-![Screenshot](./docs/screenshot.png)
+## UI Preview
+
+### 1. Calendar Dashboard & Checklist Flow
+![Calendar Dashboard Preview](./docs/screenshot.svg)
+
+### 2. Feature Architecture Overview
+![Features Overview](./docs/features.svg)
+
+---
 
 ## Features
 

@@ -1,0 +1,80 @@
+<svg width="1200" height="600" viewBox="0 0 1200 600" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <rect width="1200" height="600" fill="#0F172A"/>
+  
+  <!-- 功能卡片 1：农历与节假日日历 -->
+  <g transform="translate(60, 50)">
+    <rect width="330" height="500" rx="16" fill="#1E293B" stroke="#334155" stroke-width="2"/>
+    <text x="24" y="44" fill="#38BDF8" font-size="22">📅</text>
+    <text x="60" y="45" fill="#F8FAFC" font-size="16" font-weight="bold">农历节气 &amp; 法定节假日</text>
+    <text x="24" y="80" fill="#94A3B8" font-size="13">内置轻量算法，精准支持 1900-2050 农历转换与中秋、春节等传统节日高亮。</text>
+    
+    <!-- 模拟日历小格 -->
+    <rect x="24" y="120" width="80" height="65" rx="8" fill="#0F172A" stroke="#3B82F6" stroke-width="2"/>
+    <text x="34" y="145" fill="#3B82F6" font-size="16" font-weight="bold">10</text>
+    <text x="64" y="170" fill="#FBBF24" font-size="12" font-weight="bold" text-anchor="middle">教师节</text>
+    
+    <rect x="115" y="120" width="80" height="65" rx="8" fill="#0F172A" stroke="#334155"/>
+    <text x="125" y="145" fill="#F8FAFC" font-size="16">11</text>
+    <text x="155" y="170" fill="#FBBF24" font-size="12" text-anchor="middle">八月</text>
+    
+    <rect x="205" y="120" width="80" height="65" rx="8" fill="#0F172A" stroke="#334155"/>
+    <text x="215" y="145" fill="#F8FAFC" font-size="16">12</text>
+    <text x="245" y="170" fill="#94A3B8" font-size="12" text-anchor="middle">初二</text>
+    
+    <text x="24" y="240" fill="#CBD5E1" font-size="13" font-weight="bold">🌐 语言自适应模式：</text>
+    <text x="24" y="270" fill="#94A3B8" font-size="12">• 中文 (zh)：农历初一/廿五 + 传统民俗节气</text>
+    <text x="24" y="295" fill="#94A3B8" font-size="12">• 英文 (en) / 西文 (es)：全球国际公共节假日</text>
+  </g>
+
+  <!-- 功能卡片 2：待办 Checklist & 时间点选 -->
+  <g transform="translate(435, 50)">
+    <rect width="330" height="500" rx="16" fill="#1E293B" stroke="#334155" stroke-width="2"/>
+    <text x="24" y="44" fill="#34D399" font-size="22">✅</text>
+    <text x="60" y="45" fill="#F8FAFC" font-size="16" font-weight="bold">待办清单 &amp; 状态流转</text>
+    <text x="24" y="80" fill="#94A3B8" font-size="13">支持圆角 Checkbox 打勾归档、红黄绿三级优先级标色与 +15m / +1h 快捷推迟。</text>
+    
+    <!-- 模拟待办卡片 1 -->
+    <rect x="24" y="120" width="282" height="60" rx="8" fill="#0F172A" stroke="#334155"/>
+    <rect x="24" y="120" width="4" height="60" rx="2" fill="#EF4444"/>
+    <rect x="36" y="132" width="14" height="14" rx="3" stroke="#64748B" fill="none"/>
+    <text x="58" y="144" fill="#F8FAFC" font-size="12" font-weight="bold">给方案做技术评审</text>
+    <text x="36" y="168" fill="#94A3B8" font-size="11">⏰ 14:00 (高优)</text>
+    <text x="250" y="168" fill="#EF4444" font-size="11" font-weight="bold">待提醒</text>
+    
+    <!-- 模拟已完成卡片 2 -->
+    <rect x="24" y="190" width="282" height="54" rx="8" fill="#0F172A" stroke="#334155" opacity="0.6"/>
+    <rect x="24" y="190" width="4" height="54" rx="2" fill="#10B981"/>
+    <rect x="36" y="202" width="14" height="14" rx="3" fill="#10B981"/>
+    <text x="58" y="214" fill="#94A3B8" font-size="12" text-decoration="line-through">提交下半周工作计划</text>
+    <line x1="58" y1="210" x2="180" y2="210" stroke="#94A3B8" stroke-width="1.2"/>
+    <text x="250" y="232" fill="#10B981" font-size="11">已完成</text>
+    
+    <text x="24" y="290" fill="#CBD5E1" font-size="13" font-weight="bold">⚡ 常用时间一键点选：</text>
+    <rect x="24" y="310" width="60" height="24" rx="6" fill="#334155"/>
+    <text x="36" y="326" fill="#CBD5E1" font-size="11">09:00</text>
+    <rect x="94" y="310" width="60" height="24" rx="6" fill="#334155"/>
+    <text x="106" y="326" fill="#CBD5E1" font-size="11">14:00</text>
+    <rect x="164" y="310" width="60" height="24" rx="6" fill="#334155"/>
+    <text x="176" y="326" fill="#CBD5E1" font-size="11">18:00</text>
+  </g>
+
+  <!-- 功能卡片 3：系统级弹窗与 iCal 导出 -->
+  <g transform="translate(810, 50)">
+    <rect width="330" height="500" rx="16" fill="#1E293B" stroke="#334155" stroke-width="2"/>
+    <text x="24" y="44" fill="#F59E0B" font-size="22">🔔</text>
+    <text x="60" y="45" fill="#F8FAFC" font-size="16" font-weight="bold">跨平台通知 &amp; iCal 导出</text>
+    <text x="24" y="80" fill="#94A3B8" font-size="13">支持 macOS 与 Windows 10/11 原生通知提醒、离线漏发补发与 .ics 日历导出。</text>
+    
+    <!-- 模拟系统通知弹窗卡片 -->
+    <rect x="24" y="120" width="282" height="74" rx="12" fill="#0F172A" stroke="#475569" stroke-width="1.5"/>
+    <circle cx="50" cy="157" r="16" fill="#3B82F6"/>
+    <text x="44" y="163" fill="#FFFFFF" font-size="16">⏰</text>
+    <text x="76" y="148" fill="#F8FAFC" font-size="13" font-weight="bold">DSH 智能提醒到期</text>
+    <text x="76" y="170" fill="#94A3B8" font-size="11">给教师节方案做技术评审 (14:00)</text>
+    
+    <text x="24" y="240" fill="#CBD5E1" font-size="13" font-weight="bold">📥 标准日历文件导出：</text>
+    <text x="24" y="265" fill="#94A3B8" font-size="12">• 支持生成标准 .ics 格式文件</text>
+    <text x="24" y="288" fill="#94A3B8" font-size="12">• 双击可直接导入 Apple 日历、Outlook</text>
+    <text x="24" y="311" fill="#94A3B8" font-size="12">• 支持循环事件与离线自动补发横幅</text>
+  </g>
+</svg>

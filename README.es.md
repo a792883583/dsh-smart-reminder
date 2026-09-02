@@ -2,9 +2,17 @@
 
 Asistente universal de recordatorios inteligentes, calendario lunar y lista de tareas para DSH Web GUI.
 
-[English Documentation](./README.md) | [中文文档](./README.zh.md)
+[English Documentation](./README.en.md) | [中文文档](./README.md)
 
-![Captura de pantalla](./docs/screenshot.png)
+## Vista Previa de la Interfaz (UI Preview)
+
+### 1. Panel de Calendario y Lista de Tareas
+![Vista previa del calendario](./docs/screenshot.svg)
+
+### 2. Resumen de Características Principales
+![Resumen de características](./docs/features.svg)
+
+---
 
 ## Características
 

@@ -4,7 +4,15 @@ DSH Web GUI 通用智能提醒、农历日历看板与待办清单助手插件�
 
 [English Documentation](./README.en.md) | [Documentación en Español](./README.es.md)
 
-![功能界面截图](./docs/screenshot.png)
+## 界面预览 (UI Preview)
+
+### 1. 全屏日历看板与待办流转 (Calendar Dashboard)
+![日历看板与待办流转预览图](./docs/screenshot.svg)
+
+### 2. 核心功能特性总览 (Feature Overview)
+![核心功能特性图解](./docs/features.svg)
+
+---
 
 ## 功能特性
 
