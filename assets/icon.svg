@@ -1,0 +1,43 @@
+<svg width="256" height="256" viewBox="0 0 256 256" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="bgGrad" x1="0" y1="0" x2="256" y2="256" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#3B82F6"/>
+      <stop offset="100%" stop-color="#1D4ED8"/>
+    </linearGradient>
+    <linearGradient id="clockGrad" x1="120" y1="120" x2="230" y2="230" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#F59E0B"/>
+      <stop offset="100%" stop-color="#D97706"/>
+    </linearGradient>
+    <filter id="shadow" x="0" y="0" width="280" height="280" filterUnits="userSpaceOnUse">
+      <feDropShadow dx="0" dy="8" stdDeviation="12" flood-color="#0F172A" flood-opacity="0.25"/>
+    </filter>
+  </defs>
+
+  <!-- 日历主体 -->
+  <rect x="24" y="36" width="208" height="196" rx="44" fill="url(#bgGrad)" filter="url(#shadow)"/>
+  
+  <!-- 顶部日历挂耳 -->
+  <rect x="64" y="16" width="20" height="36" rx="10" fill="#93C5FD"/>
+  <rect x="172" y="16" width="20" height="36" rx="10" fill="#93C5FD"/>
+  
+  <!-- 日历内白底 -->
+  <rect x="40" y="80" width="176" height="136" rx="28" fill="#FFFFFF"/>
+  
+  <!-- 日历网格线与方块 -->
+  <rect x="60" y="104" width="28" height="24" rx="6" fill="#EFF6FF"/>
+  <rect x="100" y="104" width="28" height="24" rx="6" fill="#EFF6FF"/>
+  <rect x="140" y="104" width="28" height="24" rx="6" fill="#EFF6FF"/>
+  
+  <rect x="60" y="136" width="28" height="24" rx="6" fill="#EFF6FF"/>
+  <rect x="100" y="136" width="28" height="24" rx="6" fill="#EFF6FF"/>
+  <rect x="140" y="136" width="28" height="24" rx="6" fill="#EFF6FF"/>
+
+  <!-- 右下角悬浮闹钟徽标 -->
+  <circle cx="176" cy="176" r="48" fill="url(#clockGrad)" filter="url(#shadow)"/>
+  <circle cx="176" cy="176" r="40" fill="#FFFFFF"/>
+  
+  <!-- 闹钟指针 -->
+  <path d="M176 150V176H196" stroke="#D97706" stroke-width="8" stroke-linecap="round" stroke-linejoin="round"/>
+  <!-- 中心点 -->
+  <circle cx="176" cy="176" r="5" fill="#B45309"/>
+</svg>
