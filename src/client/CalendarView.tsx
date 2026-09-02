@@ -3,11 +3,7 @@
  * 深度国际化（支持中文 zh、英语 en、西班牙语 es 动态自适应）。
  * 完整特性：农历/国际节日自适应、即时搜索、状态筛选(All/Pending/Done)、优先级标色、
  * 月度统计概览、全键盘快捷键 (Esc/Cmd+K/←/→)、一键撤销 (Undo)、iCal 导出。
- * 彻底重构布局与尺寸：
- * 1. 弹窗拓宽至 980px，支持自适应弹性宽度，解决英文/西文多语言换行拥挤问题；
- * 2. 修复日历网格计算：严格动态生成当月天数矩阵（动态 5 或 6 行，杜绝非当月残缺整行）；
- * 3. 头部统计胶囊设置 white-space: nowrap + 弹性收缩；
- * 4. 英文/西文月份选择与节日文本智能排版（Veterans Day 等不截断溢出）。
+ * 彻底重构深浅色检测机制：直接侦测 DSH Web 容器与页面背景亮暗色，杜绝误判为浅色白底。
  * @module dsh-smart-reminder/client/CalendarView
  */
 
@@ -58,7 +54,7 @@ const ANIMATION_STYLES = `
 }
 .dsh-rem-cell:hover {
   transform: translateY(-2px);
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
   z-index: 2;
 }
 
@@ -68,7 +64,7 @@ const ANIMATION_STYLES = `
 }
 .dsh-rem-card:hover {
   transform: translateY(-1px);
-  box-shadow: 0 3px 10px rgba(0, 0, 0, 0.06);
+  box-shadow: 0 3px 10px rgba(0, 0, 0, 0.12);
 }
 
 .dsh-btn-smooth {
@@ -93,6 +89,46 @@ function ensureAnimStyles(): void {
   document.head.appendChild(tag)
 }
 
+/** 全方位检测 DSH Web 是否处于深色模式 */
+function detectDshDarkTheme(): boolean {
+  if (typeof window === 'undefined' || typeof document === 'undefined') return true
+
+  // 1. 检查 documentElement / body 属性
+  const doc = document.documentElement
+  const body = document.body
+  const candidates = [
+    doc.getAttribute('data-theme'),
+    doc.getAttribute('data-ds-dark-theme'),
+    body?.getAttribute('data-theme'),
+    doc.className,
+    body?.className,
+  ]
+
+  for (const c of candidates) {
+    if (typeof c === 'string') {
+      if (c.includes('dark') || c === 'dark') return true
+      if (c.includes('light') || c === 'light') return false
+    }
+  }
+
+  // 2. 检查 DSH Web 侧边栏/背景颜色亮度
+  try {
+    const bgElem = document.querySelector('[class*="sidebar"], [class*="layout"], body')
+    if (bgElem) {
+      const bg = window.getComputedStyle(bgElem).backgroundColor
+      const rgb = bg.match(/\d+/g)
+      if (rgb && rgb.length >= 3) {
+        // 亮度公式 L = 0.299R + 0.587G + 0.114B
+        const luma = 0.299 * Number(rgb[0]) + 0.587 * Number(rgb[1]) + 0.114 * Number(rgb[2])
+        return luma < 128
+      }
+    }
+  } catch {}
+
+  // 3. 回退系统媒介查询
+  return window.matchMedia('(prefers-color-scheme: dark)').matches
+}
+
 export function CalendarView(props: { api: ReminderApi; onClose: () => void; localeStr?: string }): React.ReactElement {
   const { api, onClose, localeStr } = props
   const [currentDate, setCurrentDate] = useState(() => new Date())
@@ -111,36 +147,31 @@ export function CalendarView(props: { api: ReminderApi; onClose: () => void; loc
 
   ensureAnimStyles()
 
-  // 监听系统/页面深浅色模式变化与语言属性
-  const [isDark, setIsDark] = useState(() => {
-    if (typeof window === 'undefined') return true
-    const htmlTheme = document.documentElement.getAttribute('data-theme')
-    if (htmlTheme === 'dark') return true
-    if (htmlTheme === 'light') return false
-    return window.matchMedia('(prefers-color-scheme: dark)').matches
-  })
+  // 监听深浅色模式与主题变化
+  const [isDark, setIsDark] = useState(detectDshDarkTheme)
 
   useEffect(() => {
-    const mq = window.matchMedia('(prefers-color-scheme: dark)')
-    const handler = (e: MediaQueryListEvent) => {
-      const htmlTheme = document.documentElement.getAttribute('data-theme')
-      if (!htmlTheme) setIsDark(e.matches)
+    const updateTheme = () => {
+      setIsDark(detectDshDarkTheme())
     }
-    mq.addEventListener('change', handler)
+
+    const mq = window.matchMedia('(prefers-color-scheme: dark)')
+    mq.addEventListener('change', updateTheme)
 
     const mo = new MutationObserver(() => {
-      const htmlTheme = document.documentElement.getAttribute('data-theme')
-      if (htmlTheme === 'dark') setIsDark(true)
-      else if (htmlTheme === 'light') setIsDark(false)
-
+      updateTheme()
       const docLang = document.documentElement.getAttribute('lang')
       if (docLang) setLang(detectLanguage(docLang))
     })
-    mo.observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme', 'class', 'lang'] })
+    mo.observe(document.documentElement, { attributes: true, subtree: true, attributeFilter: ['data-theme', 'class', 'lang', 'style'] })
+
+    // 周期性轻量探针，确保切主题即刻响应
+    const interval = setInterval(updateTheme, 800)
 
     return () => {
-      mq.removeEventListener('change', handler)
+      mq.removeEventListener('change', updateTheme)
       mo.disconnect()
+      clearInterval(interval)
     }
   }, [])
 
@@ -370,7 +401,7 @@ export function CalendarView(props: { api: ReminderApi; onClose: () => void; loc
   // 主题色彩配置（深色 / 浅色）
   const theme = isDark
     ? {
-        bgOverlay: 'rgba(15, 23, 42, 0.78)',
+        bgOverlay: 'rgba(15, 23, 42, 0.82)',
         bgModal: '#1e293b',
         headerBg: 'linear-gradient(to right, #1e293b, #0f172a)',
         border: '#334155',
@@ -391,8 +422,8 @@ export function CalendarView(props: { api: ReminderApi; onClose: () => void; loc
         inputBg: '#0f172a',
         presetBg: '#334155',
         presetText: '#cbd5e1',
-        missedBannerBg: 'rgba(239, 68, 68, 0.12)',
-        missedBannerBorder: 'rgba(239, 68, 68, 0.3)',
+        missedBannerBg: 'rgba(239, 68, 68, 0.15)',
+        missedBannerBorder: 'rgba(239, 68, 68, 0.35)',
       }
     : {
         bgOverlay: 'rgba(71, 85, 105, 0.45)',
@@ -471,7 +502,7 @@ export function CalendarView(props: { api: ReminderApi; onClose: () => void; loc
           animation: 'dshFadeIn 0.24s cubic-bezier(0.16, 1, 0.3, 1) forwards',
         },
       },
-      // 头部（宽裕弹性排版，彻底杜绝换行挤压）
+      // 头部
       createElement(
         'div',
         {
@@ -491,7 +522,7 @@ export function CalendarView(props: { api: ReminderApi; onClose: () => void; loc
           { style: { display: 'flex', alignItems: 'center', gap: '10px', minWidth: 0, flex: 1 } },
           createElement('span', { style: { display: 'flex', alignItems: 'center', color: 'inherit', flex: 'none' } }, createElement(CalendarClockIcon, { size: 18 })),
           createElement('h3', { style: { margin: 0, fontSize: '15px', fontWeight: 600, color: theme.textPrimary, whiteSpace: 'nowrap' } }, t('app.title', lang)),
-          // 月度进度统计标签 (nowrap 保护)
+          // 月度进度统计标签
           createElement(
             'span',
             {

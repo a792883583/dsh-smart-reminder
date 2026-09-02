@@ -1,0 +1,5 @@
+# dsh-smart-reminder — DSH web GUI 智能提醒插件 bundle。
+# 通过 `dsh plugin --profile web add link:<path>` 注册。
+- insert:
+    - id: dsh-smart-reminder
+      name: 'dsh-smart-reminder'
