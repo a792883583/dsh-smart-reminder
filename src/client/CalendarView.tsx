@@ -3,9 +3,11 @@
  * 深度国际化（支持中文 zh、英语 en、西班牙语 es 动态自适应）。
  * 完整特性：农历/国际节日自适应、即时搜索、状态筛选(All/Pending/Done)、优先级标色、
  * 月度统计概览、全键盘快捷键 (Esc/Cmd+K/←/→)、一键撤销 (Undo)、iCal 导出。
- * 布局彻底重构：
- * 1. 弹窗恢复黄金比例尺寸（800px 宽度，紧凑比例，杜绝压扁变宽）；
- * 2. 区分「当前选中高亮（纯蓝底色+粗框）」与「今天标记（仅日期数字上方小蓝点/文字标蓝，不画蓝色实线框，不再产生双选中混淆）」。
+ * 彻底重构布局与尺寸：
+ * 1. 弹窗拓宽至 980px，支持自适应弹性宽度，解决英文/西文多语言换行拥挤问题；
+ * 2. 修复日历网格计算：严格动态生成当月天数矩阵（动态 5 或 6 行，杜绝非当月残缺整行）；
+ * 3. 头部统计胶囊设置 white-space: nowrap + 弹性收缩；
+ * 4. 英文/西文月份选择与节日文本智能排版（Veterans Day 等不截断溢出）。
  * @module dsh-smart-reminder/client/CalendarView
  */
 
@@ -24,6 +26,9 @@ const COMMON_TIME_PRESETS = [
   { label: '18:00', time: '18:00' },
   { label: '20:00', time: '20:00' },
 ]
+
+const MONTH_NAMES_EN = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
+const MONTH_NAMES_ES = ['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic']
 
 const ANIMATION_STYLES = `
 @keyframes dshFadeIn {
@@ -53,7 +58,7 @@ const ANIMATION_STYLES = `
 }
 .dsh-rem-cell:hover {
   transform: translateY(-2px);
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
   z-index: 2;
 }
 
@@ -63,7 +68,7 @@ const ANIMATION_STYLES = `
 }
 .dsh-rem-card:hover {
   transform: translateY(-1px);
-  box-shadow: 0 3px 10px rgba(0, 0, 0, 0.08);
+  box-shadow: 0 3px 10px rgba(0, 0, 0, 0.06);
 }
 
 .dsh-btn-smooth {
@@ -212,7 +217,7 @@ export function CalendarView(props: { api: ReminderApi; onClose: () => void; loc
   const year = currentDate.getFullYear()
   const month = currentDate.getMonth() + 1
 
-  // 计算当月日历网格
+  // 计算当月日历网格：根据实际占用行数动态生成（刚好 35 格或 42 格，杜绝空白第 6 行）
   const firstDayOfWeek = new Date(year, month - 1, 1).getDay()
   const totalDays = new Date(year, month, 0).getDate()
   const prevMonthDays = new Date(year, month - 1, 0).getDate()
@@ -221,19 +226,24 @@ export function CalendarView(props: { api: ReminderApi; onClose: () => void; loc
   // 前置上月填充
   for (let i = firstDayOfWeek - 1; i >= 0; i--) {
     const pDay = prevMonthDays - i
-    const pDateKey = `${year}-${String(month - 1 || 12).padStart(2, '0')}-${String(pDay).padStart(2, '0')}`
-    calendarCells.push({ day: pDay, isCurrentMonth: false, dateKey: pDateKey, year, month: month - 1 })
+    const pMonth = month - 1 === 0 ? 12 : month - 1
+    const pYear = month - 1 === 0 ? year - 1 : year
+    const pDateKey = `${pYear}-${String(pMonth).padStart(2, '0')}-${String(pDay).padStart(2, '0')}`
+    calendarCells.push({ day: pDay, isCurrentMonth: false, dateKey: pDateKey, year: pYear, month: pMonth })
   }
   // 当月天数
   for (let d = 1; d <= totalDays; d++) {
     const dateKey = `${year}-${String(month).padStart(2, '0')}-${String(d).padStart(2, '0')}`
     calendarCells.push({ day: d, isCurrentMonth: true, dateKey, year, month })
   }
-  // 后置下月填充到 35 或 42 格
-  const remaining = 42 - calendarCells.length
-  for (let d = 1; d <= remaining && calendarCells.length < 42; d++) {
-    const nDateKey = `${year}-${String(month + 1 > 12 ? 1 : month + 1).padStart(2, '0')}-${String(d).padStart(2, '0')}`
-    calendarCells.push({ day: d, isCurrentMonth: false, dateKey: nDateKey, year, month: month + 1 })
+  // 动态决定总格数：如果总数 <= 35 则刚好填满 5 行（35格），否则填满 6 行（42格）
+  const targetTotalCells = calendarCells.length <= 35 ? 35 : 42
+  const remaining = targetTotalCells - calendarCells.length
+  for (let d = 1; d <= remaining; d++) {
+    const nMonth = month + 1 > 12 ? 1 : month + 1
+    const nYear = month + 1 > 12 ? year + 1 : year
+    const nDateKey = `${nYear}-${String(nMonth).padStart(2, '0')}-${String(d).padStart(2, '0')}`
+    calendarCells.push({ day: d, isCurrentMonth: false, dateKey: nDateKey, year: nYear, month: nMonth })
   }
 
   // 选中的日期的提醒列表（支持搜索与状态过滤）
@@ -259,6 +269,13 @@ export function CalendarView(props: { api: ReminderApi; onClose: () => void; loc
     const rate = total > 0 ? Math.round((completed / total) * 100) : 0
     return { total, completed, rate }
   }, [items, year, month])
+
+  // 格式化年月展示
+  const formattedMonthTitle = useMemo(() => {
+    if (lang === 'en') return `${MONTH_NAMES_EN[month - 1]} ${year}`
+    if (lang === 'es') return `${MONTH_NAMES_ES[month - 1]} de ${year}`
+    return `${year} 年 ${month} 月`
+  }, [year, month, lang])
 
   // 离线漏发的事项（Catch-up）
   const missedItems = items.filter((i) => i.isMissedCatchup && i.status !== 'completed')
@@ -427,7 +444,7 @@ export function CalendarView(props: { api: ReminderApi; onClose: () => void; loc
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'center',
-        padding: '24px',
+        padding: '20px',
         boxSizing: 'border-box',
         color: theme.textSecondary,
         fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", sans-serif',
@@ -439,9 +456,9 @@ export function CalendarView(props: { api: ReminderApi; onClose: () => void; loc
       {
         className: 'dsh-rem-modal',
         style: {
-          width: '860px',
-          maxWidth: '92vw',
-          height: '620px',
+          width: '980px',
+          maxWidth: '94vw',
+          height: '660px',
           maxHeight: '90vh',
           backgroundColor: theme.bgModal,
           borderRadius: '16px',
@@ -454,7 +471,7 @@ export function CalendarView(props: { api: ReminderApi; onClose: () => void; loc
           animation: 'dshFadeIn 0.24s cubic-bezier(0.16, 1, 0.3, 1) forwards',
         },
       },
-      // 头部
+      // 头部（宽裕弹性排版，彻底杜绝换行挤压）
       createElement(
         'div',
         {
@@ -466,25 +483,29 @@ export function CalendarView(props: { api: ReminderApi; onClose: () => void; loc
             justifyContent: 'space-between',
             background: theme.headerBg,
             flex: 'none',
+            gap: '12px',
           },
         },
         createElement(
           'div',
-          { style: { display: 'flex', alignItems: 'center', gap: '10px' } },
-          createElement('span', { style: { display: 'flex', alignItems: 'center', color: 'inherit' } }, createElement(CalendarClockIcon, { size: 18 })),
-          createElement('h3', { style: { margin: 0, fontSize: '15px', fontWeight: 600, color: theme.textPrimary } }, t('app.title', lang)),
-          // 月度进度统计标签
+          { style: { display: 'flex', alignItems: 'center', gap: '10px', minWidth: 0, flex: 1 } },
+          createElement('span', { style: { display: 'flex', alignItems: 'center', color: 'inherit', flex: 'none' } }, createElement(CalendarClockIcon, { size: 18 })),
+          createElement('h3', { style: { margin: 0, fontSize: '15px', fontWeight: 600, color: theme.textPrimary, whiteSpace: 'nowrap' } }, t('app.title', lang)),
+          // 月度进度统计标签 (nowrap 保护)
           createElement(
             'span',
             {
               style: {
                 fontSize: '11px',
-                padding: '2px 8px',
+                padding: '3px 10px',
                 borderRadius: '12px',
                 backgroundColor: isDark ? '#334155' : '#e2e8f0',
                 color: theme.textMuted,
                 fontWeight: 500,
-                marginLeft: '4px',
+                whiteSpace: 'nowrap',
+                overflow: 'hidden',
+                textOverflow: 'ellipsis',
+                maxWidth: '260px',
               },
             },
             t('stats.summary', lang, { total: monthStats.total, rate: monthStats.rate }),
@@ -492,7 +513,7 @@ export function CalendarView(props: { api: ReminderApi; onClose: () => void; loc
         ),
         createElement(
           'div',
-          { style: { display: 'flex', alignItems: 'center', gap: '8px' } },
+          { style: { display: 'flex', alignItems: 'center', gap: '8px', flex: 'none' } },
           // 语言快捷选择器
           createElement(
             'select',
@@ -500,7 +521,7 @@ export function CalendarView(props: { api: ReminderApi; onClose: () => void; loc
               value: lang,
               onChange: (e: any) => setLang(e.target.value as Lang),
               style: {
-                padding: '4px 8px',
+                padding: '5px 8px',
                 fontSize: '11px',
                 borderRadius: '6px',
                 border: `1px solid ${theme.btnSecondaryBorder}`,
@@ -508,6 +529,7 @@ export function CalendarView(props: { api: ReminderApi; onClose: () => void; loc
                 color: theme.textSecondary,
                 cursor: 'pointer',
                 outline: 'none',
+                fontWeight: 500,
               },
             },
             createElement('option', { value: 'zh' }, '🇨🇳 中文'),
@@ -529,6 +551,7 @@ export function CalendarView(props: { api: ReminderApi; onClose: () => void; loc
                 color: theme.textSecondary,
                 cursor: 'pointer',
                 fontWeight: 500,
+                whiteSpace: 'nowrap',
               },
             },
             t('btn.exportIcs', lang),
@@ -547,6 +570,7 @@ export function CalendarView(props: { api: ReminderApi; onClose: () => void; loc
                 color: theme.textSecondary,
                 cursor: 'pointer',
                 fontWeight: 500,
+                whiteSpace: 'nowrap',
               },
             },
             t('btn.testNotify', lang),
@@ -565,6 +589,7 @@ export function CalendarView(props: { api: ReminderApi; onClose: () => void; loc
                 color: '#ffffff',
                 cursor: 'pointer',
                 fontWeight: 500,
+                whiteSpace: 'nowrap',
               },
             },
             t('btn.close', lang),
@@ -629,7 +654,7 @@ export function CalendarView(props: { api: ReminderApi; onClose: () => void; loc
             createElement(
               'div',
               { style: { display: 'flex', alignItems: 'center', gap: '8px' } },
-              createElement('h3', { style: { margin: 0, fontSize: '16px', fontWeight: 600, color: theme.textPrimary } }, `${year} - ${String(month).padStart(2, '0')}`),
+              createElement('h3', { style: { margin: 0, fontSize: '16px', fontWeight: 600, color: theme.textPrimary } }, formattedMonthTitle),
               createElement(
                 'button',
                 {
@@ -642,9 +667,9 @@ export function CalendarView(props: { api: ReminderApi; onClose: () => void; loc
             ),
             createElement(
               'div',
-              { style: { display: 'flex', gap: '5px' } },
-              createElement('button', { className: 'dsh-btn-smooth', onClick: prevMonth, style: { padding: '4px 10px', borderRadius: '5px', border: `1px solid ${theme.btnSecondaryBorder}`, background: theme.btnSecondaryBg, color: theme.textSecondary, cursor: 'pointer', fontSize: '11px' } }, t('btn.prevMonth', lang)),
-              createElement('button', { className: 'dsh-btn-smooth', onClick: nextMonth, style: { padding: '4px 10px', borderRadius: '5px', border: `1px solid ${theme.btnSecondaryBorder}`, background: theme.btnSecondaryBg, color: theme.textSecondary, cursor: 'pointer', fontSize: '11px' } }, t('btn.nextMonth', lang)),
+              { style: { display: 'flex', gap: '6px' } },
+              createElement('button', { className: 'dsh-btn-smooth', onClick: prevMonth, style: { padding: '5px 12px', borderRadius: '6px', border: `1px solid ${theme.btnSecondaryBorder}`, background: theme.btnSecondaryBg, color: theme.textSecondary, cursor: 'pointer', fontSize: '12px' } }, t('btn.prevMonth', lang)),
+              createElement('button', { className: 'dsh-btn-smooth', onClick: nextMonth, style: { padding: '5px 12px', borderRadius: '6px', border: `1px solid ${theme.btnSecondaryBorder}`, background: theme.btnSecondaryBg, color: theme.textSecondary, cursor: 'pointer', fontSize: '12px' } }, t('btn.nextMonth', lang)),
             ),
           ),
 
@@ -657,7 +682,7 @@ export function CalendarView(props: { api: ReminderApi; onClose: () => void; loc
             ),
           ),
 
-          // 日历网格 (7x6) - 比例协调紧凑
+          // 日历网格 (按月实际占用 5 行或 6 行动态充满)
           createElement(
             'div',
             { style: { display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: '6px', flex: 1 } },
@@ -674,7 +699,7 @@ export function CalendarView(props: { api: ReminderApi; onClose: () => void; loc
                 subtitle = lunar.festivalOrDay
                 isSpecial = lunar.isSpecial
               } else {
-                const globalFest = GLOBAL_SOLAR_FEST5IVAL(solarKey)
+                const globalFest = GLOBAL_SOLAR_FESTIVALS[solarKey]
                 if (globalFest) {
                   subtitle = globalFest[lang] || globalFest.en
                   isSpecial = true
@@ -695,7 +720,6 @@ export function CalendarView(props: { api: ReminderApi; onClose: () => void; loc
                   style: {
                     padding: '6px 4px',
                     borderRadius: '8px',
-                    // 彻底修复：只有选中的日期才有实线边框和背景色；今天是日期数字带小蓝点/文字标蓝，绝不画选中边框
                     backgroundColor: isSelected
                       ? theme.cellSelectedBg
                       : cell.isCurrentMonth
@@ -739,19 +763,19 @@ export function CalendarView(props: { api: ReminderApi; onClose: () => void; loc
                     'span',
                     {
                       style: {
-                        fontSize: '11px',
+                        fontSize: '10px',
                         color: isSpecial ? theme.textLunarSpecial : theme.textLunarMuted,
                         fontWeight: isSpecial ? 600 : 400,
                         marginTop: '0px',
                         whiteSpace: 'nowrap',
                         overflow: 'hidden',
                         textOverflow: 'ellipsis',
-                        maxWidth: '90%',
+                        maxWidth: '92%',
                       },
                     },
                     subtitle,
                   )
-                ) : createElement('span', { style: { height: '14px' } }),
+                ) : createElement('span', { style: { height: '12px' } }),
               )
             }),
           ),
@@ -790,6 +814,7 @@ export function CalendarView(props: { api: ReminderApi; onClose: () => void; loc
                   fontWeight: 600,
                   cursor: 'pointer',
                   boxShadow: '0 2px 5px rgba(37,99,235,0.25)',
+                  whiteSpace: 'nowrap',
                 },
               },
               t('btn.newReminder', lang),
@@ -835,6 +860,7 @@ export function CalendarView(props: { api: ReminderApi; onClose: () => void; loc
                     color: statusFilter === st ? '#3b82f6' : theme.presetText,
                     cursor: 'pointer',
                     fontWeight: statusFilter === st ? 600 : 400,
+                    whiteSpace: 'nowrap',
                   },
                 },
                 t(`filter.${st}`, lang),
@@ -965,7 +991,7 @@ export function CalendarView(props: { api: ReminderApi; onClose: () => void; loc
                         ),
                       ),
                     ),
-                    item.description ? createElement('p', { style: { margin: '2px 0 0', fontSize: '11px', color: theme.textMuted } }, item.description) : null,
+                    item.description ? createElement('p', { style: { margin: '2px 0 0', fontSize: '10px', color: theme.textMuted } }, item.description) : null,
                   )
                 }),
               ),
@@ -1251,8 +1277,4 @@ function formatDateKey(d: Date): string {
   const m = String(d.getMonth() + 1).padStart(2, '0')
   const day = String(d.getDate()).padStart(2, '0')
   return `${y}-${m}-${day}`
-}
-
-function GLOBAL_SOLAR_FEST5IVAL(k: string) {
-  return GLOBAL_SOLAR_FESTIVALS[k]
 }
