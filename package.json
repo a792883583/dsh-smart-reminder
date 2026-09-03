@@ -1,6 +1,6 @@
 {
   "name": "dsh-smart-reminder",
-  "version": "0.1.5",
+  "version": "0.1.6",
   "description": "Smart calendar reminder & schedule assistant for DSH Web GUI: lunar calendar, holidays, system notifications on macOS/Windows, and WeCom/platform push integration.",
   "license": "MIT",
   "author": "Jaden Tang <jaden.tang@sjfood.com>",
