@@ -3,9 +3,7 @@
  * 深度国际化（支持中文 zh、英语 en、西班牙语 es 动态自适应）。
  * 完整特性：农历/国际节日自适应、即时搜索、状态筛选(All/Pending/Done)、优先级标色、
  * 月度统计概览、全键盘快捷键 (Esc/Cmd+K/←/→)、一键撤销 (Undo)、iCal 导出。
- * 
- * 核心升级：【前端直连实时倒计时调度器 + 悬浮全局强力警报模态框】
- * 无论系统权限是否被 macOS 拦截，只要浏览器开着，到点立刻在页面正中央弹出带有清脆铃声的【强力提醒模态框】！
+ * 纯净系统原生通知派发（去除非必要内层模态框）。
  * @module dsh-smart-reminder/client/CalendarView
  */
 
@@ -45,11 +43,6 @@ const ANIMATION_STYLES = `
 @keyframes dshToastSlide {
   from { opacity: 0; transform: translate(-50%, 12px); }
   to { opacity: 1; transform: translate(-50%, 0); }
-}
-@keyframes dshAlertDrop {
-  0% { opacity: 0; transform: scale(0.85) translateY(-30px); }
-  60% { transform: scale(1.03) translateY(4px); }
-  100% { opacity: 1; transform: scale(1) translateY(0); }
 }
 
 .dsh-rem-cell {
@@ -96,38 +89,40 @@ function ensureAnimStyles(): void {
   document.head.appendChild(tag)
 }
 
-/** 播放优雅清脆的提醒铃声 (Web Audio API) */
-function playReminderAudio(): void {
+/** 全方位检测 DSH Web 是否处于深色模式 */
+function detectDshDarkTheme(): boolean {
+  if (typeof window === 'undefined' || typeof document === 'undefined') return true
+
+  const doc = document.documentElement
+  const body = document.body
+  const candidates = [
+    doc.getAttribute('data-theme'),
+    doc.getAttribute('data-ds-dark-theme'),
+    body?.getAttribute('data-theme'),
+    doc.className,
+    body?.className,
+  ]
+
+  for (const c of candidates) {
+    if (typeof c === 'string') {
+      if (c.includes('dark') || c === 'dark') return true
+      if (c.includes('light') || c === 'light') return false
+    }
+  }
+
   try {
-    const AudioContext = window.AudioContext || (window as any).webkitAudioContext
-    if (!AudioContext) return
-    const ctx = new AudioContext()
-    const now = ctx.currentTime
-
-    const osc1 = ctx.createOscillator()
-    const osc2 = ctx.createOscillator()
-    const gain = ctx.createGain()
-
-    osc1.type = 'sine'
-    osc1.frequency.setValueAtTime(587.33, now) // D5
-    osc1.frequency.exponentialRampToValueAtTime(880, now + 0.3) // A5
-
-    osc2.type = 'sine'
-    osc2.frequency.setValueAtTime(880, now) // A5
-    osc2.frequency.exponentialRampToValueAtTime(1174.66, now + 0.3) // D6
-
-    gain.gain.setValueAtTime(0.3, now)
-    gain.gain.exponentialRampToValueAtTime(0.001, now + 0.8)
-
-    osc1.connect(gain)
-    osc2.connect(gain)
-    gain.connect(ctx.destination)
-
-    osc1.start(now)
-    osc2.start(now)
-    osc1.stop(now + 0.8)
-    osc2.stop(now + 0.8)
+    const bgElem = document.querySelector('[class*="sidebar"], [class*="layout"], body')
+    if (bgElem) {
+      const bg = window.getComputedStyle(bgElem).backgroundColor
+      const rgb = bg.match(/\d+/g)
+      if (rgb && rgb.length >= 3) {
+        const luma = 0.299 * Number(rgb[0]) + 0.587 * Number(rgb[1]) + 0.114 * Number(rgb[2])
+        return luma < 128
+      }
+    }
   } catch {}
+
+  return window.matchMedia('(prefers-color-scheme: dark)').matches
 }
 
 export function CalendarView(props: { api: ReminderApi; onClose: () => void; localeStr?: string }): React.ReactElement {
@@ -146,41 +141,32 @@ export function CalendarView(props: { api: ReminderApi; onClose: () => void; loc
   // 撤销删除缓存 (Undo)
   const [deletedCache, setDeletedCache] = useState<ReminderItem | null>(null)
 
-  // 到期强提醒模态框
-  const [activeAlarm, setActiveAlarm] = useState<ReminderItem | null>(null)
-
   ensureAnimStyles()
 
-  // 监听系统/页面深浅色模式变化与语言属性
-  const [isDark, setIsDark] = useState(() => {
-    if (typeof window === 'undefined') return true
-    const htmlTheme = document.documentElement.getAttribute('data-theme')
-    if (htmlTheme === 'dark') return true
-    if (htmlTheme === 'light') return false
-    return window.matchMedia('(prefers-color-scheme: dark)').matches
-  })
+  // 监听深浅色模式与主题变化
+  const [isDark, setIsDark] = useState(detectDshDarkTheme)
 
   useEffect(() => {
-    const mq = window.matchMedia('(prefers-color-scheme: dark)')
-    const handler = (e: MediaQueryListEvent) => {
-      const htmlTheme = document.documentElement.getAttribute('data-theme')
-      if (!htmlTheme) setIsDark(e.matches)
+    const updateTheme = () => {
+      setIsDark(detectDshDarkTheme())
     }
-    mq.addEventListener('change', handler)
+
+    const mq = window.matchMedia('(prefers-color-scheme: dark)')
+    mq.addEventListener('change', updateTheme)
 
     const mo = new MutationObserver(() => {
-      const htmlTheme = document.documentElement.getAttribute('data-theme')
-      if (htmlTheme === 'dark') setIsDark(true)
-      else if (htmlTheme === 'light') setIsDark(false)
-
+      updateTheme()
       const docLang = document.documentElement.getAttribute('lang')
       if (docLang) setLang(detectLanguage(docLang))
     })
-    mo.observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme', 'class', 'lang'] })
+    mo.observe(document.documentElement, { attributes: true, subtree: true, attributeFilter: ['data-theme', 'class', 'lang', 'style'] })
+
+    const interval = setInterval(updateTheme, 800)
 
     return () => {
-      mq.removeEventListener('change', handler)
+      mq.removeEventListener('change', updateTheme)
       mo.disconnect()
+      clearInterval(interval)
     }
   }, [])
 
@@ -207,24 +193,6 @@ export function CalendarView(props: { api: ReminderApi; onClose: () => void; loc
     void loadItems()
   }, [loadItems])
 
-  // 前端直连高精秒级轮询调度器：到点自动弹窗并响铃
-  useEffect(() => {
-    const interval = setInterval(() => {
-      const now = Date.now()
-      // 检查是否有由于时间到达而应当触发的 pending 事项
-      const due = items.find((i) => i.status === 'pending' && i.dueAt <= now)
-      if (due && (!activeAlarm || activeAlarm.id !== due.id)) {
-        setActiveAlarm(due)
-        playReminderAudio()
-        if (typeof Notification !== 'undefined' && Notification.permission === 'granted') {
-          new Notification(`⏰ 提醒到期：${due.title}`, { body: due.dueTimeStr })
-        }
-      }
-    }, 1000)
-
-    return () => clearInterval(interval)
-  }, [items, activeAlarm])
-
   const showToast = (text: string, showUndo = false) => {
     setToastMsg({ text, showUndo })
     setTimeout(() => setToastMsg(null), 4000)
@@ -245,10 +213,6 @@ export function CalendarView(props: { api: ReminderApi; onClose: () => void; loc
   // 全键盘快捷键支持
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      if (activeAlarm) {
-        if (e.key === 'Escape' || e.key === 'Enter') setActiveAlarm(null)
-        return
-      }
       if (editingItem) {
         if (e.key === 'Escape') setEditingItem(null)
         return
@@ -274,7 +238,7 @@ export function CalendarView(props: { api: ReminderApi; onClose: () => void; loc
     }
     window.addEventListener('keydown', handleKeyDown)
     return () => window.removeEventListener('keydown', handleKeyDown)
-  }, [editingItem, activeAlarm, onClose, prevMonth, nextMonth, selectedDate])
+  }, [editingItem, onClose, prevMonth, nextMonth, selectedDate])
 
   const year = currentDate.getFullYear()
   const month = currentDate.getMonth() + 1
@@ -412,27 +376,6 @@ export function CalendarView(props: { api: ReminderApi; onClose: () => void; loc
   }
 
   const handleTestNotify = async () => {
-    playReminderAudio()
-    // 触发前台醒目测试弹窗
-    setActiveAlarm({
-      id: 'test-alarm',
-      title: '测试提醒：开研发周会',
-      description: '您的 DSH 智能提醒通知与声音服务运行正常！',
-      dueTimeStr: '09:50',
-      dueAt: Date.now(),
-      status: 'pending',
-      createdAt: Date.now(),
-      notifySystem: true,
-    })
-
-    if (typeof Notification !== 'undefined' && Notification.permission === 'granted') {
-      new Notification('⏰ DSH 智能提醒', { body: '您的智能提醒通知服务运行正常！' })
-    } else if (typeof Notification !== 'undefined' && Notification.permission !== 'denied') {
-      Notification.requestPermission().then((perm) => {
-        if (perm === 'granted') new Notification('⏰ DSH 智能提醒', { body: '您的智能提醒通知服务运行正常！' })
-      })
-    }
-
     const res = await api.testNotify()
     showToast(res.message || 'Notification triggered')
   }
@@ -846,7 +789,7 @@ export function CalendarView(props: { api: ReminderApi; onClose: () => void; loc
                     },
                     subtitle,
                   )
-                ) : createElement('span', { style: { height: '14px' } }),
+                ) : createElement('span', { style: { height: '12px' } }),
               )
             }),
           ),
@@ -1276,82 +1219,6 @@ export function CalendarView(props: { api: ReminderApi; onClose: () => void; loc
                 { style: { display: 'flex', gap: '10px', justifyContent: 'flex-end', marginTop: '6px' } },
                 createElement('button', { type: 'button', className: 'dsh-btn-smooth', onClick: () => setEditingItem(null), style: { padding: '7px 15px', borderRadius: '8px', border: `1px solid ${theme.btnSecondaryBorder}`, background: theme.btnSecondaryBg, color: theme.textSecondary, cursor: 'pointer', fontSize: '12px', fontWeight: 500 } }, t('btn.cancel', lang)),
                 createElement('button', { type: 'submit', className: 'dsh-btn-smooth', style: { padding: '7px 18px', borderRadius: '8px', border: 'none', background: '#2563eb', color: '#fff', fontWeight: 600, cursor: 'pointer', fontSize: '12px', boxShadow: '0 2px 6px rgba(37,99,235,0.35)' } }, t('btn.save', lang)),
-              ),
-            ),
-          )
-        : null,
-
-      // 【核心升级】：到期强制前台强提醒模态框（绝对无法错过）
-      activeAlarm
-        ? createElement(
-            'div',
-            {
-              style: {
-                position: 'absolute',
-                top: 0,
-                left: 0,
-                right: 0,
-                bottom: 0,
-                backgroundColor: 'rgba(0, 0, 0, 0.65)',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                zIndex: 20000,
-                backdropFilter: 'blur(8px)',
-                animation: 'dshOverlayFade 0.2s ease-out forwards',
-              },
-            },
-            createElement(
-              'div',
-              {
-                style: {
-                  width: '400px',
-                  backgroundColor: theme.bgModal,
-                  borderRadius: '16px',
-                  padding: '24px',
-                  border: '2px solid #ef4444',
-                  boxShadow: '0 25px 50px -12px rgba(239, 68, 68, 0.35)',
-                  display: 'flex',
-                  flexDirection: 'column',
-                  gap: '14px',
-                  animation: 'dshAlertDrop 0.3s cubic-bezier(0.34, 1.56, 0.64, 1) forwards',
-                  textAlign: 'center',
-                },
-              },
-              createElement('div', { style: { fontSize: '38px', margin: '0 auto' } }, '⏰'),
-              createElement('h3', { style: { margin: 0, fontSize: '18px', fontWeight: 700, color: theme.textPrimary } }, '定时提醒到期！'),
-              createElement('div', { style: { padding: '12px', backgroundColor: theme.inputBg, borderRadius: '10px', border: `1px solid ${theme.border}` } },
-                createElement('div', { style: { fontSize: '15px', fontWeight: 600, color: '#2563eb', marginBottom: '4px' } }, activeAlarm.title),
-                createElement('div', { style: { fontSize: '12px', color: theme.textMuted } }, `设定时间：${activeAlarm.dueTimeStr}`),
-                activeAlarm.description ? createElement('div', { style: { fontSize: '12px', color: theme.textSecondary, marginTop: '6px' } }, activeAlarm.description) : null,
-              ),
-              createElement(
-                'div',
-                { style: { display: 'flex', gap: '8px', justifyContent: 'center', marginTop: '6px' } },
-                createElement(
-                  'button',
-                  {
-                    className: 'dsh-btn-smooth',
-                    onClick: () => {
-                      handleSnooze(activeAlarm.id, 15, '15m')
-                      setActiveAlarm(null)
-                    },
-                    style: { padding: '8px 14px', borderRadius: '8px', border: `1px solid ${theme.btnSecondaryBorder}`, background: theme.btnSecondaryBg, color: theme.textSecondary, cursor: 'pointer', fontSize: '12px', fontWeight: 600 },
-                  },
-                  '推迟 15 分钟',
-                ),
-                createElement(
-                  'button',
-                  {
-                    className: 'dsh-btn-smooth',
-                    onClick: () => {
-                      handleToggleComplete(activeAlarm.id)
-                      setActiveAlarm(null)
-                    },
-                    style: { padding: '8px 20px', borderRadius: '8px', border: 'none', background: '#10b981', color: '#fff', fontWeight: 600, cursor: 'pointer', fontSize: '13px', boxShadow: '0 2px 6px rgba(16,185,129,0.4)' },
-                  },
-                  '✓ 我知道了 (完成)',
-                ),
               ),
             ),
           )
