@@ -1,62 +1,54 @@
-# dsh-smart-reminder
+# dsh-smart-reminder: Smart Calendar Reminder & Schedule Assistant
 
-Universal Smart Reminder, Lunar Calendar & To-Do Checklist Assistant for DSH Web GUI.
+Universal calendar reminder, lunar calendar dashboard, and to-do checklist plugin for DSH Web GUI.
 
-[中文文档](./README.md) | [Documentación en Español](./README.es.md)
+[Documentación en Español](./README.es.md) | [中文说明文档](./README.md)
 
 ## UI Preview
 
-### 1. Calendar Dashboard & Checklist Flow
+### 1. Fullscreen Calendar Dashboard & To-Do Workflow
 ![Calendar Dashboard Preview](./docs/screenshot.svg)
 
-### 2. Feature Architecture Overview
-![Features Overview](./docs/features.svg)
+### 2. Feature Architecture
+![Feature Overview](./docs/features.svg)
 
 ---
 
-## Features
+## Key Features
 
-1. **Pixel-Perfect Sidebar Entry**: Seamlessly integrated below the Message Gateway tab with matching monochrome linear iconography.
-2. **Trilingual i18n (EN / ZH / ES)**:
-   - Full support for **English (en)**, **Chinese (zh)**, and **Spanish (es)**.
-   - Locale-aware holiday system: Chinese mode displays traditional lunar calendar and festivals; International modes display global and western public holidays (Christmas, New Year, Halloween, etc.).
-3. **Interactive To-Do Checklist**:
-   - Round checkboxes with instant strikethrough completion.
-   - Filter pills for `All`, `Pending`, and `Completed` items.
-   - Real-time keyword search for titles and notes.
-4. **Visual Date & Time Picker**:
-   - Native date/time picker inputs.
-   - Quick-select time pills (`09:00`, `11:30`, `14:00`, `16:30`, `18:00`, `20:00`).
-   - Priority coding: 🔴 High (Urgent), 🟡 Medium, 🟢 Low.
-5. **One-Click Snooze & 5-Second Undo**:
-   - Postpone active reminders by `+15m` or `+1h` with one click.
-   - Instant 5-second Undo toast when deleting items to prevent accidental loss.
-6. **Offline Catch-Up Banner**:
-   - Automatically detects missed reminders after system sleep or restart and displays an alert banner.
-7. **iCal (.ics) Calendar Export**:
-   - One-click export to standard `.ics` calendar files ready to import into Apple Calendar, Google Calendar, and Microsoft Outlook.
-8. **Cross-Platform Native Notifications**:
-   - **macOS**: Native notifications with official Apple Reminders / Calendar icons.
-   - **Windows**: Native Windows 10/11 Toast Notifications.
-   - **Multi-channel**: Automatically integrates with active messaging platforms (WeCom / Telegram / Discord / Email) when configured.
-9. **Keyboard Shortcuts**:
-   - `Esc`: Close modal/panel.
-   - `Cmd + K` / `Ctrl + K`: Quick create reminder.
-   - `← / →`: Previous / Next month.
+1. **Seamless Sidebar Navigation**: Embedded right below "Message Gateway" with an official monochrome outline icon.
+2. **Drag & Drop Rescheduling**:
+   - 🖱️ Directly click and drag any reminder card from the right list and drop it onto any calendar date cell to reschedule instantly!
+3. **In-Place Reminder Editing**:
+   - Click the ✏️ edit button on any reminder card to modify title, time, repeat rules, push platforms, and notes with one click.
+4. **Native DSH Web Locale Sync**:
+   - Automatically and reactively follows DSH Web language settings (English, Spanish, Chinese) across all titles, buttons, tips, and date formats.
+5. **Interactive Checklist & Status Filtering**:
+   - Checkbox completion with animated strikethrough.
+   - Quick status capsules (`All` / `Pending` / `Completed`) and instant search query filter.
+6. **Visual Time Picker & Ecosystem Push Integration**:
+   - Native date/time picker with one-click quick presets (`09:00`, `11:30`, `14:00`, `16:30`, `18:00`, `20:00`).
+   - Seamlessly links with [`dsh-message-gateway`](https://www.npmjs.com/package/dsh-message-gateway) to push notifications to **WeCom AI Bot**, **Telegram**, **Discord**, or **Email**.
+   - 🔴 High (Urgent) / 🟡 Medium / 🟢 Low priority color indicators.
+7. **One-Click Snooze & 5-Second Undo**:
+   - Postpone tasks by `+15m` or `+1h` with one tap.
+   - Deletion includes a 5-second Undo toast to prevent accidental actions.
+8. **Offline Missed Reminder Catch-up**:
+   - Detects due tasks that occurred while offline or asleep and presents a catch-up banner.
+9. **RFC 5545 iCal (.ics) Calendar Export**:
+   - Export standard `.ics` calendar files directly compatible with Apple Calendar, Google Calendar, and Outlook.
+10. **Full Keyboard Navigation**:
+    - `Esc`: Close modal or overlay;
+    - `Cmd/Ctrl + K`: Quickly open new reminder dialog;
+    - `← / →`: Switch between months.
 
-## Agent Tool Reference
+## Agent Tools
 
 - `set_reminder(title, dueTime, description?, repeat?, pushPlatform?, pushTarget?)`: Schedule reminders.
 - `list_reminders(type?: "upcoming" | "history" | "all")`: Query reminders.
-- `complete_reminder(id)`: Mark reminder as completed or reopen.
-- `snooze_reminder(id, minutes?)`: Postpone reminder.
-- `cancel_reminder(id)`: Delete/cancel reminder.
-
-## Feedback & Issues
-
-💡 **We warmly welcome your issues and suggestions!**  
-If you encounter any bugs, have feature requests, or want to contribute improvements, please feel free to [open an Issue on GitHub](https://github.com/a792883583/dsh-smart-reminder/issues).  
-*(Note: Please follow our issue templates so our automation bot can process your request smoothly!)*
+- `complete_reminder(id)`: Mark tasks as completed or revert them.
+- `snooze_reminder(id, minutes?)`: Postpone reminders.
+- `cancel_reminder(id)`: Cancel and remove reminders.
 
 ## License
 

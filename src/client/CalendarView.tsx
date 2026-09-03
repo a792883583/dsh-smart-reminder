@@ -1233,8 +1233,8 @@ export function CalendarView(props: { api: ReminderApi; onClose: () => void }): 
               // 消息推送渠道
               createElement(
                 'div',
-                { style: { display: 'flex', flexDirection: 'column', gap: '4px' } },
-                createElement('label', { style: { fontSize: '12px', fontWeight: 600, color: theme.textSecondary } }, t('form.pushLabel', lang)),
+                { style: { display: 'flex', flexDirection: 'column', gap: '4px', width: '100%', boxSizing: 'border-box' } },
+                createElement('label', { style: { fontSize: '12px', fontWeight: 600, color: theme.textSecondary } }, t('push.label', lang)),
                 createElement(
                   'select',
                   {
@@ -1249,6 +1249,7 @@ export function CalendarView(props: { api: ReminderApi; onClose: () => void }): 
                       fontSize: '12px',
                       outline: 'none',
                       width: '100%',
+                      boxSizing: 'border-box',
                     },
                   },
                   createElement('option', { value: 'none' }, t('push.none', lang)),
@@ -1263,11 +1264,11 @@ export function CalendarView(props: { api: ReminderApi; onClose: () => void }): 
               editingItem.pushPlatform !== 'none'
                 ? createElement(
                     'div',
-                    { style: { display: 'flex', flexDirection: 'column', gap: '4px' } },
-                    createElement('label', { style: { fontSize: '12px', fontWeight: 600, color: theme.textSecondary } }, t('form.pushTargetLabel', lang)),
+                    { style: { display: 'flex', flexDirection: 'column', gap: '4px', width: '100%', boxSizing: 'border-box' } },
+                    createElement('label', { style: { fontSize: '12px', fontWeight: 600, color: theme.textSecondary } }, t('push.targetLabel', lang)),
                     createElement('input', {
                       type: 'text',
-                      placeholder: t('form.pushTargetPlaceholder', lang),
+                      placeholder: t('push.targetPlaceholder', lang),
                       value: editingItem.pushTarget || '',
                       onChange: (e: any) => setEditingItem({ ...editingItem, pushTarget: e.target.value }),
                       style: {
@@ -1279,6 +1280,7 @@ export function CalendarView(props: { api: ReminderApi; onClose: () => void }): 
                         fontSize: '12px',
                         outline: 'none',
                         width: '100%',
+                        boxSizing: 'border-box',
                       },
                     }),
                   )
