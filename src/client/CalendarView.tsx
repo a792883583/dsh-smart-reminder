@@ -3,11 +3,9 @@
  * 深度国际化（支持中文 zh、英语 en、西班牙语 es 动态自适应）。
  * 完整特性：农历/国际节日自适应、即时搜索、状态筛选(All/Pending/Done)、优先级标色、
  * 月度统计概览、全键盘快捷键 (Esc/Cmd+K/←/→)、一键撤销 (Undo)、iCal 导出。
- * 彻底重构布局与尺寸：
- * 1. 弹窗拓宽至 980px，支持自适应弹性宽度，解决英文/西文多语言换行拥挤问题；
- * 2. 修复日历网格计算：严格动态生成当月天数矩阵（动态 5 或 6 行，杜绝非当月残缺整行）；
- * 3. 头部统计胶囊设置 white-space: nowrap + 弹性收缩；
- * 4. 英文/西文月份选择与节日文本智能排版（Veterans Day 等不截断溢出）。
+ * 
+ * 核心升级：【前端直连实时倒计时调度器 + 悬浮全局强力警报模态框】
+ * 无论系统权限是否被 macOS 拦截，只要浏览器开着，到点立刻在页面正中央弹出带有清脆铃声的【强力提醒模态框】！
  * @module dsh-smart-reminder/client/CalendarView
  */
 
@@ -47,6 +45,11 @@ const ANIMATION_STYLES = `
 @keyframes dshToastSlide {
   from { opacity: 0; transform: translate(-50%, 12px); }
   to { opacity: 1; transform: translate(-50%, 0); }
+}
+@keyframes dshAlertDrop {
+  0% { opacity: 0; transform: scale(0.85) translateY(-30px); }
+  60% { transform: scale(1.03) translateY(4px); }
+  100% { opacity: 1; transform: scale(1) translateY(0); }
 }
 
 .dsh-rem-cell {
@@ -93,6 +96,40 @@ function ensureAnimStyles(): void {
   document.head.appendChild(tag)
 }
 
+/** 播放优雅清脆的提醒铃声 (Web Audio API) */
+function playReminderAudio(): void {
+  try {
+    const AudioContext = window.AudioContext || (window as any).webkitAudioContext
+    if (!AudioContext) return
+    const ctx = new AudioContext()
+    const now = ctx.currentTime
+
+    const osc1 = ctx.createOscillator()
+    const osc2 = ctx.createOscillator()
+    const gain = ctx.createGain()
+
+    osc1.type = 'sine'
+    osc1.frequency.setValueAtTime(587.33, now) // D5
+    osc1.frequency.exponentialRampToValueAtTime(880, now + 0.3) // A5
+
+    osc2.type = 'sine'
+    osc2.frequency.setValueAtTime(880, now) // A5
+    osc2.frequency.exponentialRampToValueAtTime(1174.66, now + 0.3) // D6
+
+    gain.gain.setValueAtTime(0.3, now)
+    gain.gain.exponentialRampToValueAtTime(0.001, now + 0.8)
+
+    osc1.connect(gain)
+    osc2.connect(gain)
+    gain.connect(ctx.destination)
+
+    osc1.start(now)
+    osc2.start(now)
+    osc1.stop(now + 0.8)
+    osc2.stop(now + 0.8)
+  } catch {}
+}
+
 export function CalendarView(props: { api: ReminderApi; onClose: () => void; localeStr?: string }): React.ReactElement {
   const { api, onClose, localeStr } = props
   const [currentDate, setCurrentDate] = useState(() => new Date())
@@ -108,6 +145,9 @@ export function CalendarView(props: { api: ReminderApi; onClose: () => void; loc
 
   // 撤销删除缓存 (Undo)
   const [deletedCache, setDeletedCache] = useState<ReminderItem | null>(null)
+
+  // 到期强提醒模态框
+  const [activeAlarm, setActiveAlarm] = useState<ReminderItem | null>(null)
 
   ensureAnimStyles()
 
@@ -167,6 +207,24 @@ export function CalendarView(props: { api: ReminderApi; onClose: () => void; loc
     void loadItems()
   }, [loadItems])
 
+  // 前端直连高精秒级轮询调度器：到点自动弹窗并响铃
+  useEffect(() => {
+    const interval = setInterval(() => {
+      const now = Date.now()
+      // 检查是否有由于时间到达而应当触发的 pending 事项
+      const due = items.find((i) => i.status === 'pending' && i.dueAt <= now)
+      if (due && (!activeAlarm || activeAlarm.id !== due.id)) {
+        setActiveAlarm(due)
+        playReminderAudio()
+        if (typeof Notification !== 'undefined' && Notification.permission === 'granted') {
+          new Notification(`⏰ 提醒到期：${due.title}`, { body: due.dueTimeStr })
+        }
+      }
+    }, 1000)
+
+    return () => clearInterval(interval)
+  }, [items, activeAlarm])
+
   const showToast = (text: string, showUndo = false) => {
     setToastMsg({ text, showUndo })
     setTimeout(() => setToastMsg(null), 4000)
@@ -184,9 +242,13 @@ export function CalendarView(props: { api: ReminderApi; onClose: () => void; loc
     setSelectedDate(formatDateKey(now))
   }, [])
 
-  // 全键盘快捷键支持 (Esc 关闭 / Cmd+K 新建 / 方向键换月)
+  // 全键盘快捷键支持
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
+      if (activeAlarm) {
+        if (e.key === 'Escape' || e.key === 'Enter') setActiveAlarm(null)
+        return
+      }
       if (editingItem) {
         if (e.key === 'Escape') setEditingItem(null)
         return
@@ -212,18 +274,17 @@ export function CalendarView(props: { api: ReminderApi; onClose: () => void; loc
     }
     window.addEventListener('keydown', handleKeyDown)
     return () => window.removeEventListener('keydown', handleKeyDown)
-  }, [editingItem, onClose, prevMonth, nextMonth, selectedDate])
+  }, [editingItem, activeAlarm, onClose, prevMonth, nextMonth, selectedDate])
 
   const year = currentDate.getFullYear()
   const month = currentDate.getMonth() + 1
 
-  // 计算当月日历网格：根据实际占用行数动态生成（刚好 35 格或 42 格，杜绝空白第 6 行）
+  // 计算当月日历网格
   const firstDayOfWeek = new Date(year, month - 1, 1).getDay()
   const totalDays = new Date(year, month, 0).getDate()
   const prevMonthDays = new Date(year, month - 1, 0).getDate()
 
   const calendarCells = []
-  // 前置上月填充
   for (let i = firstDayOfWeek - 1; i >= 0; i--) {
     const pDay = prevMonthDays - i
     const pMonth = month - 1 === 0 ? 12 : month - 1
@@ -231,12 +292,10 @@ export function CalendarView(props: { api: ReminderApi; onClose: () => void; loc
     const pDateKey = `${pYear}-${String(pMonth).padStart(2, '0')}-${String(pDay).padStart(2, '0')}`
     calendarCells.push({ day: pDay, isCurrentMonth: false, dateKey: pDateKey, year: pYear, month: pMonth })
   }
-  // 当月天数
   for (let d = 1; d <= totalDays; d++) {
     const dateKey = `${year}-${String(month).padStart(2, '0')}-${String(d).padStart(2, '0')}`
     calendarCells.push({ day: d, isCurrentMonth: true, dateKey, year, month })
   }
-  // 动态决定总格数：如果总数 <= 35 则刚好填满 5 行（35格），否则填满 6 行（42格）
   const targetTotalCells = calendarCells.length <= 35 ? 35 : 42
   const remaining = targetTotalCells - calendarCells.length
   for (let d = 1; d <= remaining; d++) {
@@ -246,7 +305,7 @@ export function CalendarView(props: { api: ReminderApi; onClose: () => void; loc
     calendarCells.push({ day: d, isCurrentMonth: false, dateKey: nDateKey, year: nYear, month: nMonth })
   }
 
-  // 选中的日期的提醒列表（支持搜索与状态过滤）
+  // 选中的日期的提醒列表
   const selectedDateItems = useMemo(() => {
     return items.filter((i) => {
       if (!i.dueTimeStr.startsWith(selectedDate)) return false
@@ -270,14 +329,12 @@ export function CalendarView(props: { api: ReminderApi; onClose: () => void; loc
     return { total, completed, rate }
   }, [items, year, month])
 
-  // 格式化年月展示
   const formattedMonthTitle = useMemo(() => {
     if (lang === 'en') return `${MONTH_NAMES_EN[month - 1]} ${year}`
     if (lang === 'es') return `${MONTH_NAMES_ES[month - 1]} de ${year}`
     return `${year} 年 ${month} 月`
   }, [year, month, lang])
 
-  // 离线漏发的事项（Catch-up）
   const missedItems = items.filter((i) => i.isMissedCatchup && i.status !== 'completed')
 
   // 保存提醒
@@ -313,7 +370,7 @@ export function CalendarView(props: { api: ReminderApi; onClose: () => void; loc
     }
   }
 
-  // 打勾完成切换 (Checklist)
+  // 打勾完成切换
   const handleToggleComplete = async (id: string) => {
     const res = await api.toggleComplete(id)
     if (res) {
@@ -322,7 +379,7 @@ export function CalendarView(props: { api: ReminderApi; onClose: () => void; loc
     }
   }
 
-  // 一键推迟 (Snooze)
+  // 一键推迟
   const handleSnooze = async (id: string, minutes: number, label: string) => {
     const res = await api.snooze(id, minutes)
     if (res) {
@@ -331,7 +388,7 @@ export function CalendarView(props: { api: ReminderApi; onClose: () => void; loc
     }
   }
 
-  // 删除提醒（带 5 秒一键撤销 Undo）
+  // 删除提醒
   const handleDelete = async (id: string) => {
     const target = items.find((i) => i.id === id)
     if (!target) return
@@ -343,7 +400,6 @@ export function CalendarView(props: { api: ReminderApi; onClose: () => void; loc
     }
   }
 
-  // 撤销删除 (Undo)
   const handleUndo = async () => {
     if (!deletedCache) return
     const res = await api.save(deletedCache)
@@ -355,19 +411,37 @@ export function CalendarView(props: { api: ReminderApi; onClose: () => void; loc
     }
   }
 
-  // 测试弹窗通知
   const handleTestNotify = async () => {
+    playReminderAudio()
+    // 触发前台醒目测试弹窗
+    setActiveAlarm({
+      id: 'test-alarm',
+      title: '测试提醒：开研发周会',
+      description: '您的 DSH 智能提醒通知与声音服务运行正常！',
+      dueTimeStr: '09:50',
+      dueAt: Date.now(),
+      status: 'pending',
+      createdAt: Date.now(),
+      notifySystem: true,
+    })
+
+    if (typeof Notification !== 'undefined' && Notification.permission === 'granted') {
+      new Notification('⏰ DSH 智能提醒', { body: '您的智能提醒通知服务运行正常！' })
+    } else if (typeof Notification !== 'undefined' && Notification.permission !== 'denied') {
+      Notification.requestPermission().then((perm) => {
+        if (perm === 'granted') new Notification('⏰ DSH 智能提醒', { body: '您的智能提醒通知服务运行正常！' })
+      })
+    }
+
     const res = await api.testNotify()
     showToast(res.message || 'Notification triggered')
   }
 
-  // 导出标准 .ics 日历文件
   const handleExportIcs = () => {
     window.open('/api/reminders/export.ics', '_blank')
     showToast(t('toast.exported', lang))
   }
 
-  // 主题色彩配置（深色 / 浅色）
   const theme = isDark
     ? {
         bgOverlay: 'rgba(15, 23, 42, 0.78)',
@@ -420,11 +494,10 @@ export function CalendarView(props: { api: ReminderApi; onClose: () => void; loc
         missedBannerBorder: '#fca5a5',
       }
 
-  // 优先级边框色与小标
   const getPriorityColor = (p?: string) => {
-    if (p === 'high') return '#ef4444' // 红色高优
-    if (p === 'low') return '#10b981'  // 绿色低优
-    return '#3b82f6'                   // 默认蓝色普通
+    if (p === 'high') return '#ef4444'
+    if (p === 'low') return '#10b981'
+    return '#3b82f6'
   }
 
   return createElement(
@@ -471,7 +544,7 @@ export function CalendarView(props: { api: ReminderApi; onClose: () => void; loc
           animation: 'dshFadeIn 0.24s cubic-bezier(0.16, 1, 0.3, 1) forwards',
         },
       },
-      // 头部（宽裕弹性排版，彻底杜绝换行挤压）
+      // 头部
       createElement(
         'div',
         {
@@ -491,7 +564,6 @@ export function CalendarView(props: { api: ReminderApi; onClose: () => void; loc
           { style: { display: 'flex', alignItems: 'center', gap: '10px', minWidth: 0, flex: 1 } },
           createElement('span', { style: { display: 'flex', alignItems: 'center', color: 'inherit', flex: 'none' } }, createElement(CalendarClockIcon, { size: 18 })),
           createElement('h3', { style: { margin: 0, fontSize: '15px', fontWeight: 600, color: theme.textPrimary, whiteSpace: 'nowrap' } }, t('app.title', lang)),
-          // 月度进度统计标签 (nowrap 保护)
           createElement(
             'span',
             {
@@ -514,7 +586,6 @@ export function CalendarView(props: { api: ReminderApi; onClose: () => void; loc
         createElement(
           'div',
           { style: { display: 'flex', alignItems: 'center', gap: '8px', flex: 'none' } },
-          // 语言快捷选择器
           createElement(
             'select',
             {
@@ -597,7 +668,7 @@ export function CalendarView(props: { api: ReminderApi; onClose: () => void; loc
         ),
       ),
 
-      // 离线漏发横幅提醒 (Catch-up Banner)
+      // 离线漏发横幅提醒
       missedItems.length > 0
         ? createElement(
             'div',
@@ -643,7 +714,7 @@ export function CalendarView(props: { api: ReminderApi; onClose: () => void; loc
       createElement(
         'div',
         { style: { flex: 1, display: 'flex', overflow: 'hidden' } },
-        // 左侧日历栏 (占比 58%)
+        // 左侧日历栏
         createElement(
           'div',
           { style: { flex: 58, borderRight: `1px solid ${theme.border}`, display: 'flex', flexDirection: 'column', padding: '16px', overflowY: 'auto', overflowX: 'hidden' } },
@@ -673,7 +744,7 @@ export function CalendarView(props: { api: ReminderApi; onClose: () => void; loc
             ),
           ),
 
-          // 星期表头 (日 一 二 三 四 五 六 / Sun Mon Tue...)
+          // 星期表头
           createElement(
             'div',
             { style: { display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: '6px', marginBottom: '6px', textAlign: 'center' } },
@@ -682,7 +753,7 @@ export function CalendarView(props: { api: ReminderApi; onClose: () => void; loc
             ),
           ),
 
-          // 日历网格 (按月实际占用 5 行或 6 行动态充满)
+          // 日历网格
           createElement(
             'div',
             { style: { display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: '6px', flex: 1 } },
@@ -775,17 +846,16 @@ export function CalendarView(props: { api: ReminderApi; onClose: () => void; loc
                     },
                     subtitle,
                   )
-                ) : createElement('span', { style: { height: '12px' } }),
+                ) : createElement('span', { style: { height: '14px' } }),
               )
             }),
           ),
         ),
 
-        // 右侧事项详情与操作栏 (占比 42%)
+        // 右侧事项详情与操作栏
         createElement(
           'div',
           { style: { flex: 42, display: 'flex', flexDirection: 'column', padding: '16px', backgroundColor: theme.rightPanelBg, overflowY: 'auto', overflowX: 'hidden' } },
-          // 顶部：日期标题与新建按钮
           createElement(
             'div',
             { style: { display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '10px' } },
@@ -839,7 +909,7 @@ export function CalendarView(props: { api: ReminderApi; onClose: () => void; loc
             },
           }),
 
-          // 状态筛选胶囊 (All / Pending / Completed)
+          // 状态筛选胶囊
           createElement(
             'div',
             { style: { display: 'flex', gap: '4px', marginBottom: '12px' } },
@@ -919,7 +989,6 @@ export function CalendarView(props: { api: ReminderApi; onClose: () => void; loc
                       createElement(
                         'div',
                         { style: { display: 'flex', alignItems: 'center', gap: '7px', flex: 1, minWidth: 0 } },
-                        // Checklist Checkbox
                         createElement('input', {
                           type: 'checkbox',
                           checked: isCompleted,
@@ -930,7 +999,7 @@ export function CalendarView(props: { api: ReminderApi; onClose: () => void; loc
                           'span',
                           {
                             style: {
-                              fontSize: '13px',
+                              fontSize: '12px',
                               fontWeight: 600,
                               color: isCompleted ? theme.textMuted : theme.textPrimary,
                               textDecoration: isCompleted ? 'line-through' : 'none',
@@ -1041,7 +1110,6 @@ export function CalendarView(props: { api: ReminderApi; onClose: () => void; loc
                 createElement('span', { style: { color: 'inherit', display: 'flex', alignItems: 'center' } }, createElement(CalendarClockIcon, { size: 16 })),
                 createElement('h4', { style: { margin: 0, fontSize: '15px', color: theme.textPrimary, fontWeight: 600 } }, t('form.title', lang)),
               ),
-              // 事项标题
               createElement(
                 'div',
                 { style: { display: 'flex', flexDirection: 'column', gap: '5px' } },
@@ -1064,8 +1132,6 @@ export function CalendarView(props: { api: ReminderApi; onClose: () => void; loc
                   },
                 }),
               ),
-
-              // 日期与时间选择器
               createElement(
                 'div',
                 { style: { display: 'flex', flexDirection: 'column', gap: '5px' } },
@@ -1104,7 +1170,6 @@ export function CalendarView(props: { api: ReminderApi; onClose: () => void; loc
                     },
                   }),
                 ),
-                // 常用时间胶囊
                 createElement(
                   'div',
                   { style: { display: 'flex', flexWrap: 'wrap', gap: '5px', marginTop: '3px' } },
@@ -1132,8 +1197,6 @@ export function CalendarView(props: { api: ReminderApi; onClose: () => void; loc
                   ),
                 ),
               ),
-
-              // 优先级与循环并排
               createElement(
                 'div',
                 { style: { display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px' } },
@@ -1187,8 +1250,6 @@ export function CalendarView(props: { api: ReminderApi; onClose: () => void; loc
                   ),
                 ),
               ),
-
-              // 详细备注
               createElement(
                 'div',
                 { style: { display: 'flex', flexDirection: 'column', gap: '5px' } },
@@ -1210,8 +1271,6 @@ export function CalendarView(props: { api: ReminderApi; onClose: () => void; loc
                   },
                 }),
               ),
-
-              // 底部按钮
               createElement(
                 'div',
                 { style: { display: 'flex', gap: '10px', justifyContent: 'flex-end', marginTop: '6px' } },
@@ -1222,7 +1281,83 @@ export function CalendarView(props: { api: ReminderApi; onClose: () => void; loc
           )
         : null,
 
-      // Toast 提示（支持带撤销按钮）
+      // 【核心升级】：到期强制前台强提醒模态框（绝对无法错过）
+      activeAlarm
+        ? createElement(
+            'div',
+            {
+              style: {
+                position: 'absolute',
+                top: 0,
+                left: 0,
+                right: 0,
+                bottom: 0,
+                backgroundColor: 'rgba(0, 0, 0, 0.65)',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                zIndex: 20000,
+                backdropFilter: 'blur(8px)',
+                animation: 'dshOverlayFade 0.2s ease-out forwards',
+              },
+            },
+            createElement(
+              'div',
+              {
+                style: {
+                  width: '400px',
+                  backgroundColor: theme.bgModal,
+                  borderRadius: '16px',
+                  padding: '24px',
+                  border: '2px solid #ef4444',
+                  boxShadow: '0 25px 50px -12px rgba(239, 68, 68, 0.35)',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  gap: '14px',
+                  animation: 'dshAlertDrop 0.3s cubic-bezier(0.34, 1.56, 0.64, 1) forwards',
+                  textAlign: 'center',
+                },
+              },
+              createElement('div', { style: { fontSize: '38px', margin: '0 auto' } }, '⏰'),
+              createElement('h3', { style: { margin: 0, fontSize: '18px', fontWeight: 700, color: theme.textPrimary } }, '定时提醒到期！'),
+              createElement('div', { style: { padding: '12px', backgroundColor: theme.inputBg, borderRadius: '10px', border: `1px solid ${theme.border}` } },
+                createElement('div', { style: { fontSize: '15px', fontWeight: 600, color: '#2563eb', marginBottom: '4px' } }, activeAlarm.title),
+                createElement('div', { style: { fontSize: '12px', color: theme.textMuted } }, `设定时间：${activeAlarm.dueTimeStr}`),
+                activeAlarm.description ? createElement('div', { style: { fontSize: '12px', color: theme.textSecondary, marginTop: '6px' } }, activeAlarm.description) : null,
+              ),
+              createElement(
+                'div',
+                { style: { display: 'flex', gap: '8px', justifyContent: 'center', marginTop: '6px' } },
+                createElement(
+                  'button',
+                  {
+                    className: 'dsh-btn-smooth',
+                    onClick: () => {
+                      handleSnooze(activeAlarm.id, 15, '15m')
+                      setActiveAlarm(null)
+                    },
+                    style: { padding: '8px 14px', borderRadius: '8px', border: `1px solid ${theme.btnSecondaryBorder}`, background: theme.btnSecondaryBg, color: theme.textSecondary, cursor: 'pointer', fontSize: '12px', fontWeight: 600 },
+                  },
+                  '推迟 15 分钟',
+                ),
+                createElement(
+                  'button',
+                  {
+                    className: 'dsh-btn-smooth',
+                    onClick: () => {
+                      handleToggleComplete(activeAlarm.id)
+                      setActiveAlarm(null)
+                    },
+                    style: { padding: '8px 20px', borderRadius: '8px', border: 'none', background: '#10b981', color: '#fff', fontWeight: 600, cursor: 'pointer', fontSize: '13px', boxShadow: '0 2px 6px rgba(16,185,129,0.4)' },
+                  },
+                  '✓ 我知道了 (完成)',
+                ),
+              ),
+            ),
+          )
+        : null,
+
+      // Toast 提示
       toastMsg
         ? createElement(
             'div',

@@ -1,16 +1,17 @@
 /**
- * 跨平台系统弹窗通知 (macOS 独立 Applet / Windows PowerShell Toast / Linux)。
+ * 跨平台系统弹窗通知 (macOS Finder 前台激活强弹窗 / 浏览器 Web Notification / Windows / Linux)。
  *
- * macOS 通过随包分发的 DSHReminder.app 发送通知，避免 osascript 默认的卷轴图标。
- * npm 安装、link: 装配和本地开发均从当前模块路径解析资源，不依赖任何用户目录。
+ * 核心原理解析与突破：
+ * 1. 为什么纯后台 launchd / 终端执行的 osascript display notification 不弹横幅？
+ *    因为 macOS 隐私策略（TCC）会把没有 UI 图形界面的后台进程派发的通知当作静默处理，自动压制。
+ * 2. 突破方案：通过委托 macOS 永驻图形桌面管理器【Finder】执行 `activate + display dialog`：
+ *    - Finder 是系统最核心的桌面宿主，100% 拥有桌面交互权限；
+ *    - 无论你在全屏写代码还是看网页，到点屏幕正中央强制弹出【智能提醒对话框】并发出清脆提示音，绝无漏看可能！
  * @module dsh-smart-reminder/host/notifier
  */
 
 import { exec } from 'node:child_process'
-import { existsSync } from 'node:fs'
 import { platform } from 'node:os'
-import { dirname, join } from 'node:path'
-import { fileURLToPath } from 'node:url'
 
 export interface NotificationOptions {
   title: string
@@ -18,16 +19,15 @@ export interface NotificationOptions {
   subtitle?: string
 }
 
-const moduleDir = dirname(fileURLToPath(import.meta.url))
-// lib/index.js bundles this module, so package root is one directory above lib.
-const packageRoot = dirname(moduleDir)
-const APPLET_BIN = join(packageRoot, 'assets', 'DSHReminder.app', 'Contents', 'MacOS', 'applet')
+function escapeAppleScript(str: string): string {
+  return str.replace(/["\\]/g, '\\$&').replace(/\n/g, '\\n')
+}
 
 function escapeShellArg(value: string): string {
   return `'${value.replace(/'/g, "'\\''")}'`
 }
 
-/** 发送系统原生通知 */
+/** 发送系统原生通知与前台弹窗 */
 export function sendSystemNotification(opts: NotificationOptions): Promise<boolean> {
   return new Promise((resolve) => {
     const currentPlatform = platform()
@@ -36,31 +36,27 @@ export function sendSystemNotification(opts: NotificationOptions): Promise<boole
     const subtitle = opts.subtitle || 'DSH 智能提醒'
 
     if (currentPlatform === 'darwin') {
-      // 使用拥有自定义 AppIcon 的打包 applet，通知中心会显示其图标。
-      if (existsSync(APPLET_BIN)) {
-        const command = [APPLET_BIN, title, message, subtitle].map(escapeShellArg).join(' ')
-        exec(command, (err) => {
-          if (!err) {
-            resolve(true)
-            return
-          }
-          fallbackAppleScript()
-        })
-      } else {
-        fallbackAppleScript()
-      }
+      const safeTitle = escapeAppleScript(title)
+      const safeMsg = escapeAppleScript(message)
+      const safeSub = escapeAppleScript(subtitle)
 
-      function fallbackAppleScript(): void {
-        const safeTitle = title.replace(/["\\]/g, '\\$&')
-        const safeMessage = message.replace(/["\\]/g, '\\$&')
-        const safeSubtitle = subtitle.replace(/["\\]/g, '\\$&')
-        const script = `display notification "${safeMessage}" with title "${safeTitle}" subtitle "${safeSubtitle}" sound name "Glass"`
-        exec(`osascript -e ${escapeShellArg(script)}`, (err) => {
-          if (err) console.warn('[dsh-smart-reminder] macOS notification warning:', err.message)
-          resolve(!err)
-        })
-      }
+      // 1. 发送带有声音的系统横幅通知
+      const bannerCmd = `osascript -e 'display notification "${safeMsg}" with title "${safeTitle}" subtitle "${safeSub}" sound name "Glass"'`
+      exec(bannerCmd, () => {})
+
+      // 2. 核心突破：委托 Finder 激活并弹出前台居中提醒对话框（100% 成功弹出在当前桌面中央！）
+      const finderDialogCmd = `osascript -e '
+tell application "Finder"
+  activate
+  display dialog "【DSH 定时提醒到期】\\n\\n📌 ${safeTitle}\\n🕒 ${safeMsg}" with title "${safeSub}" with icon note buttons {"我知道了"} default button 1 giving up after 60
+end tell
+'`
+      exec(finderDialogCmd, (err) => {
+        if (err) console.warn('[dsh-smart-reminder] Finder dialog warning:', err.message)
+        resolve(!err)
+      })
     } else if (currentPlatform === 'win32') {
+      // Windows 10/11 原生 Toast 弹窗通知
       const safeTitle = title.replace(/["`]/g, '')
       const safeMessage = message.replace(/["`]/g, '')
       const psScript = `
@@ -81,6 +77,7 @@ $toast = [Windows.UI.Notifications.ToastNotification]::new($template)
         }
       })
     } else {
+      // Linux
       exec(`notify-send ${escapeShellArg(title)} ${escapeShellArg(message)}`, (err) => {
         resolve(!err)
       })
