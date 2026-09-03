@@ -1039,12 +1039,45 @@ export function CalendarView(props: { api: ReminderApi; onClose: () => void; loc
                         ),
                       ),
                       createElement(
-                        'button',
-                        {
-                          onClick: () => handleDelete(item.id),
-                          style: { border: 'none', background: 'transparent', color: theme.textMuted, cursor: 'pointer', fontSize: '12px', padding: '0 3px', flex: 'none' },
-                        },
-                        '✕',
+                        'div',
+                        { style: { display: 'flex', alignItems: 'center', gap: '4px', flex: 'none' } },
+                        // 编辑按钮
+                        createElement(
+                          'button',
+                          {
+                            onClick: (e: any) => {
+                              e.stopPropagation()
+                              const [dPart, tPart] = item.dueTimeStr.split(' ')
+                              setEditingItem({
+                                id: item.id,
+                                title: item.title,
+                                date: dPart || selectedDate,
+                                time: tPart || '09:00',
+                                description: item.description || '',
+                                priority: item.priority || 'medium',
+                                repeat: item.repeat || 'none',
+                                pushPlatform: item.pushPlatform || 'none',
+                                pushTarget: item.pushTarget || '',
+                                notifySystem: item.notifySystem !== false,
+                              })
+                            },
+                            title: '编辑提醒内容与时间',
+                            style: { border: 'none', background: 'transparent', color: theme.textMuted, cursor: 'pointer', fontSize: '12px', padding: '0 3px' },
+                          },
+                          '✏️',
+                        ),
+                        // 删除按钮
+                        createElement(
+                          'button',
+                          {
+                            onClick: (e: any) => {
+                              e.stopPropagation()
+                              handleDelete(item.id)
+                            },
+                            style: { border: 'none', background: 'transparent', color: theme.textMuted, cursor: 'pointer', fontSize: '13px', padding: '0 3px' },
+                          },
+                          '✕',
+                        ),
                       ),
                     ),
                     createElement(
@@ -1138,7 +1171,7 @@ export function CalendarView(props: { api: ReminderApi; onClose: () => void; loc
                 'div',
                 { style: { display: 'flex', alignItems: 'center', gap: '8px' } },
                 createElement('span', { style: { color: 'inherit', display: 'flex', alignItems: 'center' } }, createElement(CalendarClockIcon, { size: 16 })),
-                createElement('h4', { style: { margin: 0, fontSize: '15px', color: theme.textPrimary, fontWeight: 600 } }, t('form.title', lang)),
+                createElement('h4', { style: { margin: 0, fontSize: '15px', color: theme.textPrimary, fontWeight: 600 } }, editingItem.id ? t('form.editTitle', lang) : t('form.title', lang)),
               ),
               // 事项标题
               createElement(

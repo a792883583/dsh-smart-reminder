@@ -52,6 +52,7 @@ const DICT: Record<string, Record<Lang, string>> = {
 
   // 弹窗表单
   'form.title': { zh: '设定提醒事项', en: 'Set Reminder', es: 'Configurar Recordatorio' },
+  'form.editTitle': { zh: '编辑提醒事项', en: 'Edit Reminder', es: 'Editar Recordatorio' },
   'form.contentLabel': { zh: '事项内容', en: 'Title / Content', es: 'Título / Asunto' },
   'form.contentPlaceholder': { zh: '请输入提醒内容（如：下午研发开会、提交周报）', en: 'Enter reminder title (e.g., Team meeting, submit report)', es: 'Título del recordatorio (ej. Reunión de equipo, enviar informe)' },
   'form.timeLabel': { zh: '提醒时间（点选）', en: 'Due Time (Select)', es: 'Fecha y Hora (Seleccionar)' },
