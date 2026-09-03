@@ -3,7 +3,10 @@
  * 深度国际化（支持中文 zh、英语 en、西班牙语 es 动态自适应）。
  * 完整特性：农历/国际节日自适应、即时搜索、状态筛选(All/Pending/Done)、优先级标色、
  * 月度统计概览、全键盘快捷键 (Esc/Cmd+K/←/→)、一键撤销 (Undo)、iCal 导出。
- * 纯净系统原生通知派发（去除非必要内层模态框）。
+ * 
+ * 核心升级：【到期强提醒悬浮卡片 + 系统蜂鸣音】
+ * 彻底解决 macOS 系统勿扰模式、专注模式或 TCC 权限静默导致无法弹出横幅的问题：
+ * 只要 DSH Web 网页开着，到点/测试时，页面右上角会立即弹出【高亮提醒悬浮卡片】，并伴随蜂鸣提示音，100% 绝对看得见！
  * @module dsh-smart-reminder/client/CalendarView
  */
 
@@ -43,6 +46,10 @@ const ANIMATION_STYLES = `
 @keyframes dshToastSlide {
   from { opacity: 0; transform: translate(-50%, 12px); }
   to { opacity: 1; transform: translate(-50%, 0); }
+}
+@keyframes dshPopupSlideIn {
+  from { opacity: 0; transform: translateX(50px) scale(0.95); }
+  to { opacity: 1; transform: translateX(0) scale(1); }
 }
 
 .dsh-rem-cell {
@@ -87,6 +94,40 @@ function ensureAnimStyles(): void {
   tag.dataset.plugin = 'dsh-smart-reminder-animations'
   tag.textContent = ANIMATION_STYLES
   document.head.appendChild(tag)
+}
+
+/** 播放优雅清脆的提醒铃声 (Web Audio API) */
+function playReminderAudio(): void {
+  try {
+    const AudioContext = window.AudioContext || (window as any).webkitAudioContext
+    if (!AudioContext) return
+    const ctx = new AudioContext()
+    const now = ctx.currentTime
+
+    const osc1 = ctx.createOscillator()
+    const osc2 = ctx.createOscillator()
+    const gain = ctx.createGain()
+
+    osc1.type = 'sine'
+    osc1.frequency.setValueAtTime(587.33, now) // D5
+    osc1.frequency.exponentialRampToValueAtTime(880, now + 0.3) // A5
+
+    osc2.type = 'sine'
+    osc2.frequency.setValueAtTime(880, now) // A5
+    osc2.frequency.exponentialRampToValueAtTime(1174.66, now + 0.3) // D6
+
+    gain.gain.setValueAtTime(0.3, now)
+    gain.gain.exponentialRampToValueAtTime(0.001, now + 0.8)
+
+    osc1.connect(gain)
+    osc2.connect(gain)
+    gain.connect(ctx.destination)
+
+    osc1.start(now)
+    osc2.start(now)
+    osc1.stop(now + 0.8)
+    osc2.stop(now + 0.8)
+  } catch {}
 }
 
 /** 全方位检测 DSH Web 是否处于深色模式 */
@@ -141,6 +182,9 @@ export function CalendarView(props: { api: ReminderApi; onClose: () => void; loc
   // 撤销删除缓存 (Undo)
   const [deletedCache, setDeletedCache] = useState<ReminderItem | null>(null)
 
+  // 网页端高亮悬浮提醒横幅
+  const [activePopup, setActivePopup] = useState<{ title: string; desc?: string; time: string; id: string } | null>(null)
+
   ensureAnimStyles()
 
   // 监听深浅色模式与主题变化
@@ -193,6 +237,25 @@ export function CalendarView(props: { api: ReminderApi; onClose: () => void; loc
     void loadItems()
   }, [loadItems])
 
+  // 前端到期检测（当页面打开时实时触发提醒弹窗与声音）
+  useEffect(() => {
+    const timer = setInterval(() => {
+      const now = Date.now()
+      const due = items.find((i) => i.status === 'pending' && i.dueAt <= now)
+      if (due && (!activePopup || activePopup.id !== due.id)) {
+        playReminderAudio()
+        setActivePopup({
+          id: due.id,
+          title: due.title,
+          desc: due.description,
+          time: due.dueTimeStr,
+        })
+      }
+    }, 1000)
+
+    return () => clearInterval(timer)
+  }, [items, activePopup])
+
   const showToast = (text: string, showUndo = false) => {
     setToastMsg({ text, showUndo })
     setTimeout(() => setToastMsg(null), 4000)
@@ -213,6 +276,10 @@ export function CalendarView(props: { api: ReminderApi; onClose: () => void; loc
   // 全键盘快捷键支持
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
+      if (activePopup) {
+        if (e.key === 'Escape' || e.key === 'Enter') setActivePopup(null)
+        return
+      }
       if (editingItem) {
         if (e.key === 'Escape') setEditingItem(null)
         return
@@ -238,7 +305,7 @@ export function CalendarView(props: { api: ReminderApi; onClose: () => void; loc
     }
     window.addEventListener('keydown', handleKeyDown)
     return () => window.removeEventListener('keydown', handleKeyDown)
-  }, [editingItem, onClose, prevMonth, nextMonth, selectedDate])
+  }, [editingItem, activePopup, onClose, prevMonth, nextMonth, selectedDate])
 
   const year = currentDate.getFullYear()
   const month = currentDate.getMonth() + 1
@@ -376,24 +443,23 @@ export function CalendarView(props: { api: ReminderApi; onClose: () => void; loc
   }
 
   const handleTestNotify = async () => {
-    // 1. 尝试触发浏览器原生系统级通知 (由 Chrome 弹出)
-    if (typeof Notification !== 'undefined') {
-      if (Notification.permission === 'granted') {
-        new Notification('⏰ DSH 智能提醒', {
-          body: '您的智能提醒通知与声音服务运行正常！',
-        })
-      } else if (Notification.permission !== 'denied') {
-        Notification.requestPermission().then((perm) => {
-          if (perm === 'granted') {
-            new Notification('⏰ DSH 智能提醒', {
-              body: '您的智能提醒通知与声音服务运行正常！',
-            })
-          }
-        })
-      }
+    playReminderAudio()
+    // 触发右上角高保真悬浮提醒横幅
+    setActivePopup({
+      id: 'test-alarm',
+      title: '测试提醒：开研发周会',
+      desc: '您的 DSH 智能提醒通知与声音服务运行正常！',
+      time: '10:30',
+    })
+
+    if (typeof Notification !== 'undefined' && Notification.permission === 'granted') {
+      new Notification('⏰ DSH 智能提醒', { body: '您的智能提醒通知服务运行正常！' })
+    } else if (typeof Notification !== 'undefined' && Notification.permission !== 'denied') {
+      Notification.requestPermission().then((perm) => {
+        if (perm === 'granted') new Notification('⏰ DSH 智能提醒', { body: '您的智能提醒通知服务运行正常！' })
+      })
     }
 
-    // 2. 触发宿主底层通知与系统提示音 (afplay)
     const res = await api.testNotify()
     showToast(res.message || 'Notification triggered')
   }
@@ -502,6 +568,7 @@ export function CalendarView(props: { api: ReminderApi; onClose: () => void; loc
           display: 'flex',
           flexDirection: 'column',
           overflow: 'hidden',
+          position: 'relative',
           animation: 'dshFadeIn 0.24s cubic-bezier(0.16, 1, 0.3, 1) forwards',
         },
       },
@@ -817,6 +884,7 @@ export function CalendarView(props: { api: ReminderApi; onClose: () => void; loc
         createElement(
           'div',
           { style: { flex: 42, display: 'flex', flexDirection: 'column', padding: '16px', backgroundColor: theme.rightPanelBg, overflowY: 'auto', overflowX: 'hidden' } },
+          // 顶部：日期标题与新建按钮
           createElement(
             'div',
             { style: { display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '10px' } },
@@ -1237,6 +1305,84 @@ export function CalendarView(props: { api: ReminderApi; onClose: () => void; loc
                 { style: { display: 'flex', gap: '10px', justifyContent: 'flex-end', marginTop: '6px' } },
                 createElement('button', { type: 'button', className: 'dsh-btn-smooth', onClick: () => setEditingItem(null), style: { padding: '7px 15px', borderRadius: '8px', border: `1px solid ${theme.btnSecondaryBorder}`, background: theme.btnSecondaryBg, color: theme.textSecondary, cursor: 'pointer', fontSize: '12px', fontWeight: 500 } }, t('btn.cancel', lang)),
                 createElement('button', { type: 'submit', className: 'dsh-btn-smooth', style: { padding: '7px 18px', borderRadius: '8px', border: 'none', background: '#2563eb', color: '#fff', fontWeight: 600, cursor: 'pointer', fontSize: '12px', boxShadow: '0 2px 6px rgba(37,99,235,0.35)' } }, t('btn.save', lang)),
+              ),
+            ),
+          )
+        : null,
+
+      // 【核心升级】：页面右上角悬浮提醒卡片 (绝对不会被 macOS 勿扰模式吞掉)
+      activePopup
+        ? createElement(
+            'div',
+            {
+              style: {
+                position: 'absolute',
+                top: '20px',
+                right: '20px',
+                width: '320px',
+                backgroundColor: theme.bgModal,
+                borderRadius: '12px',
+                padding: '16px',
+                border: '2px solid #ef4444',
+                boxShadow: '0 20px 25px -5px rgba(239, 68, 68, 0.35), 0 0 0 1px rgba(0,0,0,0.1)',
+                display: 'flex',
+                flexDirection: 'column',
+                gap: '8px',
+                zIndex: 20000,
+                animation: 'dshPopupSlideIn 0.25s cubic-bezier(0.34, 1.56, 0.64, 1) forwards',
+              },
+            },
+            createElement(
+              'div',
+              { style: { display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' } },
+              createElement(
+                'div',
+                { style: { display: 'flex', alignItems: 'center', gap: '8px' } },
+                createElement('span', { style: { fontSize: '20px' } }, '⏰'),
+                createElement('h5', { style: { margin: 0, fontSize: '14px', fontWeight: 700, color: theme.textPrimary } }, '定时提醒已到期！'),
+              ),
+              createElement(
+                'button',
+                {
+                  onClick: () => setActivePopup(null),
+                  style: { border: 'none', background: 'transparent', color: theme.textMuted, cursor: 'pointer', fontSize: '14px', padding: '0 2px' },
+                },
+                '✕',
+              ),
+            ),
+            createElement(
+              'div',
+              { style: { padding: '8px 10px', backgroundColor: theme.inputBg, borderRadius: '8px', border: `1px solid ${theme.border}` } },
+              createElement('div', { style: { fontSize: '13px', fontWeight: 600, color: '#2563eb' } }, activePopup.title),
+              createElement('div', { style: { fontSize: '11px', color: theme.textMuted, marginTop: '2px' } }, `设定时间：${activePopup.time}`),
+              activePopup.desc ? createElement('div', { style: { fontSize: '11px', color: theme.textSecondary, marginTop: '4px' } }, activePopup.desc) : null,
+            ),
+            createElement(
+              'div',
+              { style: { display: 'flex', gap: '6px', justifyContent: 'flex-end', marginTop: '4px' } },
+              createElement(
+                'button',
+                {
+                  className: 'dsh-btn-smooth',
+                  onClick: () => {
+                    handleSnooze(activePopup.id, 15, '15m')
+                    setActivePopup(null)
+                  },
+                  style: { padding: '4px 10px', borderRadius: '6px', border: `1px solid ${theme.btnSecondaryBorder}`, background: theme.btnSecondaryBg, color: theme.textSecondary, cursor: 'pointer', fontSize: '11px', fontWeight: 600 },
+                },
+                '推迟 15m',
+              ),
+              createElement(
+                'button',
+                {
+                  className: 'dsh-btn-smooth',
+                  onClick: () => {
+                    handleToggleComplete(activePopup.id)
+                    setActivePopup(null)
+                  },
+                  style: { padding: '4px 14px', borderRadius: '6px', border: 'none', background: '#10b981', color: '#fff', fontWeight: 600, cursor: 'pointer', fontSize: '11px', boxShadow: '0 2px 4px rgba(16,185,129,0.3)' },
+                },
+                '✓ 我知道了',
               ),
             ),
           )
