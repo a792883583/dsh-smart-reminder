@@ -344,6 +344,8 @@ export function CalendarView(props: { api: ReminderApi; onClose: () => void }): 
       pushPlatform: editingItem.pushPlatform,
       pushTarget: editingItem.pushTarget?.trim() || undefined,
       notifySystem: editingItem.notifySystem,
+      // 关键修复：编辑时间如果调整到了未来，重置状态为待提醒 (pending)，重新激活调度器！
+      status: dueAt > Date.now() ? 'pending' : undefined,
     }
     const res = await api.save(payload)
     if (res) {

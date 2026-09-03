@@ -77,6 +77,10 @@ export class ReminderStore {
     const existing = this.data.items[index]
     if (!existing) return null
     const updated: ReminderItem = { ...existing, ...patch }
+    // 关键状态机保护：如果修改的到期时间处于未来且事项当前非已打勾完成，自动重置回 pending 激活调度器
+    if (patch.dueAt && patch.dueAt > Date.now() && existing.status !== 'completed' && !patch.status) {
+      updated.status = 'pending'
+    }
     this.data.items[index] = updated
     this.save()
     return updated
