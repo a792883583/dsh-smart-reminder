@@ -190,9 +190,8 @@ export function registerReminderRoutes(ctx: Context, store: ReminderStore): () =
     path: '/api/reminders/test-notify',
     handler: async (_req: any, res: any) => {
       const ok = await sendSystemNotification({
-        title: '⏰ 测试系统提醒',
-        message: '您的 DSH 智能提醒通知服务运行正常！',
-        subtitle: '系统通知测试',
+        title: '⏰ DSH 智能提醒',
+        message: '📌 事项： 开研发周会',
       })
       res.writeHead(200, { 'content-type': 'application/json' })
       res.end(JSON.stringify({ ok, message: ok ? '系统通知已发送' : '通知发送失败' }))
