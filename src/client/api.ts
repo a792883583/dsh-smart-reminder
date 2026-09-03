@@ -1,11 +1,20 @@
 /**
- * 前端 API 封装（增加打勾完成、推迟与导出功能）。
+ * 前端 API 封装（增加打勾完成、推迟、导出与网关状态检测功能）。
  * @module dsh-smart-reminder/client/api
  */
 
 import type { ReminderItem } from '../core/types.ts'
 
 export class ReminderApi {
+  async getGatewayStatus(): Promise<{ ok: boolean; hasGateway: boolean; platforms: string[] }> {
+    try {
+      const res = await fetch('/api/reminders/gateway-status')
+      return await res.json()
+    } catch {
+      return { ok: false, hasGateway: false, platforms: [] }
+    }
+  }
+
   async getList(): Promise<ReminderItem[]> {
     try {
       const res = await fetch('/api/reminders/list')

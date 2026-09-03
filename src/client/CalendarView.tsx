@@ -1,8 +1,11 @@
 /**
  * 现代全屏日历看板与智能提醒管理页面。
  * 深度国际化（支持中文 zh、英语 en、西班牙语 es 动态自适应）。
- * 完整特性：农历/国际节日自适应、即时搜索、状态筛选(All/Pending/Done)、优先级标色、
- * 显式推送渠道与推送目标配置、月度统计概览、全键盘快捷键、iCal 导出。
+ * 完整特性：
+ * 1. 拖拽改期 (Drag & Drop)：右侧日程卡片可直接拖拽至任意日期格子释放，瞬间调整至目标日期；
+ * 2. 纯前端可控语言切换机制（保证点击语言选择器 100% 切换成功，不再受 MutationObserver 覆盖）；
+ * 3. 消息推送渠道检测与引导：安装了消息网关才激活企业微信/TG/Discord/Email，未安装显示友好安装引导；
+ * 4. 农历/国际节日自适应、即时搜索、状态筛选、优先级标色、iCal 导出。
  * @module dsh-smart-reminder/client/CalendarView
  */
 
@@ -43,9 +46,10 @@ const ANIMATION_STYLES = `
   from { opacity: 0; transform: translate(-50%, 12px); }
   to { opacity: 1; transform: translate(-50%, 0); }
 }
-@keyframes dshPopupSlideIn {
-  from { opacity: 0; transform: translateX(50px) scale(0.95); }
-  to { opacity: 1; transform: translateX(0) scale(1); }
+@keyframes dshDragPulse {
+  0% { box-shadow: 0 0 0 0 rgba(59, 130, 246, 0.4); }
+  70% { box-shadow: 0 0 0 6px rgba(59, 130, 246, 0); }
+  100% { box-shadow: 0 0 0 0 rgba(59, 130, 246, 0); }
 }
 
 .dsh-rem-cell {
@@ -61,13 +65,29 @@ const ANIMATION_STYLES = `
   z-index: 2;
 }
 
+.dsh-rem-cell.drag-over {
+  border-color: #3b82f6 !important;
+  background-color: rgba(59, 130, 246, 0.18) !important;
+  transform: scale(1.04);
+  animation: dshDragPulse 1.2s infinite;
+  z-index: 5;
+}
+
 .dsh-rem-card {
   box-sizing: border-box !important;
+  cursor: grab;
   transition: transform 0.14s ease, box-shadow 0.14s ease, border-color 0.14s ease;
 }
 .dsh-rem-card:hover {
   transform: translateY(-1px);
   box-shadow: 0 3px 10px rgba(0, 0, 0, 0.06);
+}
+.dsh-rem-card:active {
+  cursor: grabbing;
+}
+.dsh-rem-card.dragging {
+  opacity: 0.4;
+  transform: scale(0.96);
 }
 
 .dsh-btn-smooth {
@@ -133,13 +153,20 @@ export function CalendarView(props: { api: ReminderApi; onClose: () => void; loc
   const [items, setItems] = useState<ReminderItem[]>([])
   const [selectedDate, setSelectedDate] = useState<string>(() => formatDateKey(new Date()))
 
+  // 语言环境（解决切换失效：支持手动锁住用户当前选定语言）
   const [lang, setLang] = useState<Lang>(() => detectLanguage(localeStr))
 
   const [searchQuery, setSearchQuery] = useState('')
   const [statusFilter, setStatusFilter] = useState<'all' | 'pending' | 'completed'>('all')
 
   const [deletedCache, setDeletedCache] = useState<ReminderItem | null>(null)
-  const [activePopup, setActivePopup] = useState<{ title: string; desc?: string; time: string; id: string } | null>(null)
+
+  // 拖拽中的提醒 ID 与目标拖放格
+  const [draggingId, setDraggingId] = useState<string | null>(null)
+  const [dragOverDate, setDragOverDate] = useState<string | null>(null)
+
+  // 网关安装状态
+  const [gatewayInfo, setGatewayInfo] = useState<{ hasGateway: boolean; platforms: string[] }>({ hasGateway: false, platforms: [] })
 
   ensureAnimStyles()
 
@@ -152,21 +179,24 @@ export function CalendarView(props: { api: ReminderApi; onClose: () => void; loc
 
     const mo = new MutationObserver(() => {
       updateTheme()
-      const docLang = document.documentElement.getAttribute('lang')
-      if (docLang) setLang(detectLanguage(docLang))
     })
-    mo.observe(document.documentElement, { attributes: true, subtree: true, attributeFilter: ['data-theme', 'class', 'lang', 'style'] })
+    mo.observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme', 'class', 'style'] })
 
-    const interval = setInterval(updateTheme, 800)
+    const interval = setInterval(updateTheme, 1000)
+
+    // 检测网关插件是否就绪
+    api.getGatewayStatus().then((info) => {
+      if (info.ok) setGatewayInfo(info)
+    })
 
     return () => {
       mq.removeEventListener('change', updateTheme)
       mo.disconnect()
       clearInterval(interval)
     }
-  }, [])
+  }, [api])
 
-  // 编辑/新增弹窗（包含显式推送渠道与推送目标配置）
+  // 编辑/新增弹窗
   const [editingItem, setEditingItem] = useState<{
     id?: string
     title: string
@@ -210,10 +240,6 @@ export function CalendarView(props: { api: ReminderApi; onClose: () => void; loc
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      if (activePopup) {
-        if (e.key === 'Escape' || e.key === 'Enter') setActivePopup(null)
-        return
-      }
       if (editingItem) {
         if (e.key === 'Escape') setEditingItem(null)
         return
@@ -241,7 +267,7 @@ export function CalendarView(props: { api: ReminderApi; onClose: () => void; loc
     }
     window.addEventListener('keydown', handleKeyDown)
     return () => window.removeEventListener('keydown', handleKeyDown)
-  }, [editingItem, activePopup, onClose, prevMonth, nextMonth, selectedDate])
+  }, [editingItem, onClose, prevMonth, nextMonth, selectedDate])
 
   const year = currentDate.getFullYear()
   const month = currentDate.getMonth() + 1
@@ -333,6 +359,36 @@ export function CalendarView(props: { api: ReminderApi; onClose: () => void; loc
       setEditingItem(null)
       void loadItems()
     }
+  }
+
+  // 核心特性：处理拖拽改期 (Drag & Drop to Date)
+  const handleDropOnDate = async (targetDateKey: string) => {
+    if (!draggingId) return
+    const targetItem = items.find((i) => i.id === draggingId)
+    if (!targetItem) return
+
+    // 保持原来的时间点 (HH:mm)，只改变日期
+    const oldTimePart = targetItem.dueTimeStr.split(' ')[1] || '09:00'
+    const newDueTimeStr = `${targetDateKey} ${oldTimePart}`
+    const newDueAt = new Date(newDueTimeStr.replace(/-/g, '/')).getTime()
+
+    if (isNaN(newDueAt)) return
+
+    const updated = await api.save({
+      ...targetItem,
+      dueTimeStr: newDueTimeStr,
+      dueAt: newDueAt,
+      status: 'pending', // 拖拽改期后重置为待提醒
+    })
+
+    if (updated) {
+      showToast(`🗓️ 已将「${targetItem.title}」重新安排至 ${targetDateKey}`)
+      setSelectedDate(targetDateKey)
+      void loadItems()
+    }
+
+    setDraggingId(null)
+    setDragOverDate(null)
   }
 
   const handleToggleComplete = async (id: string) => {
@@ -655,7 +711,7 @@ export function CalendarView(props: { api: ReminderApi; onClose: () => void; loc
       createElement(
         'div',
         { style: { flex: 1, display: 'flex', overflow: 'hidden' } },
-        // 左侧日历栏
+        // 左侧日历栏 (支持作为 Drag & Drop DropTarget)
         createElement(
           'div',
           { style: { flex: 58, borderRight: `1px solid ${theme.border}`, display: 'flex', flexDirection: 'column', padding: '16px', overflowY: 'auto', overflowX: 'hidden' } },
@@ -694,7 +750,7 @@ export function CalendarView(props: { api: ReminderApi; onClose: () => void; loc
             ),
           ),
 
-          // 日历网格
+          // 日历网格 (支持拖拽事项至该日期放下即刻改期)
           createElement(
             'div',
             { style: { display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: '6px', flex: 1 } },
@@ -720,6 +776,7 @@ export function CalendarView(props: { api: ReminderApi; onClose: () => void; loc
 
               const isSelected = selectedDate === cell.dateKey
               const isToday = formatDateKey(new Date()) === cell.dateKey
+              const isDragOver = dragOverDate === cell.dateKey
               const pendingCount = items.filter((i) => i.dueTimeStr.startsWith(cell.dateKey) && i.status === 'pending').length
               const hasCompleted = items.some((i) => i.dueTimeStr.startsWith(cell.dateKey) && i.status === 'completed')
 
@@ -727,8 +784,21 @@ export function CalendarView(props: { api: ReminderApi; onClose: () => void; loc
                 'div',
                 {
                   key: cell.dateKey,
-                  className: 'dsh-rem-cell',
+                  className: `dsh-rem-cell ${isDragOver ? 'drag-over' : ''}`,
                   onClick: () => setSelectedDate(cell.dateKey),
+                  // Drag & Drop 事件支持
+                  onDragOver: (e: any) => {
+                    e.preventDefault()
+                    e.dataTransfer.dropEffect = 'move'
+                    if (dragOverDate !== cell.dateKey) setDragOverDate(cell.dateKey)
+                  },
+                  onDragLeave: () => {
+                    if (dragOverDate === cell.dateKey) setDragOverDate(null)
+                  },
+                  onDrop: (e: any) => {
+                    e.preventDefault()
+                    void handleDropOnDate(cell.dateKey)
+                  },
                   style: {
                     padding: '6px 4px',
                     borderRadius: '8px',
@@ -741,9 +811,11 @@ export function CalendarView(props: { api: ReminderApi; onClose: () => void; loc
                     borderStyle: 'solid',
                     borderColor: isSelected
                       ? theme.cellSelectedBorder
-                      : isDark
-                        ? theme.borderLight
-                        : theme.border,
+                      : isDragOver
+                        ? '#3b82f6'
+                        : isDark
+                          ? theme.borderLight
+                          : theme.border,
                     boxShadow: !isDark && cell.isCurrentMonth && !isSelected ? '0 1px 2px rgba(0,0,0,0.02)' : 'none',
                     cursor: 'pointer',
                     display: 'flex',
@@ -797,7 +869,6 @@ export function CalendarView(props: { api: ReminderApi; onClose: () => void; loc
         createElement(
           'div',
           { style: { flex: 42, display: 'flex', flexDirection: 'column', padding: '16px', backgroundColor: theme.rightPanelBg, overflowY: 'auto', overflowX: 'hidden' } },
-          // 顶部：日期标题与新建按钮
           createElement(
             'div',
             { style: { display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '10px' } },
@@ -882,7 +953,7 @@ export function CalendarView(props: { api: ReminderApi; onClose: () => void; loc
             ),
           ),
 
-          // 列表项
+          // 列表项 (可拖拽可打勾)
           selectedDateItems.length === 0
             ? createElement(
                 'div',
@@ -905,13 +976,25 @@ export function CalendarView(props: { api: ReminderApi; onClose: () => void; loc
                 selectedDateItems.map((item) => {
                   const isCompleted = item.status === 'completed'
                   const isDone = item.status === 'done'
+                  const isDraggingThis = draggingId === item.id
                   const pColor = getPriorityColor(item.priority)
 
                   return createElement(
                     'div',
                     {
                       key: item.id,
-                      className: 'dsh-rem-card',
+                      draggable: !isCompleted,
+                      onDragStart: (e: any) => {
+                        e.dataTransfer.setData('text/plain', item.id)
+                        e.dataTransfer.effectAllowed = 'move'
+                        setDraggingId(item.id)
+                      },
+                      onDragEnd: () => {
+                        setDraggingId(null)
+                        setDragOverDate(null)
+                      },
+                      className: `dsh-rem-card ${isDraggingThis ? 'dragging' : ''}`,
+                      title: '💡 可按住卡片直接拖拽到左侧日历某个日期中快速改期',
                       style: {
                         padding: '10px 12px',
                         backgroundColor: theme.cardBg,
@@ -1011,7 +1094,7 @@ export function CalendarView(props: { api: ReminderApi; onClose: () => void; loc
         ),
       ),
 
-      // 新增/编辑弹窗 (Modal - 带有显式推送渠道与推送目标配置)
+      // 新增/编辑弹窗 (Modal)
       editingItem
         ? createElement(
             'div',
@@ -1148,7 +1231,7 @@ export function CalendarView(props: { api: ReminderApi; onClose: () => void; loc
                 ),
               ),
 
-              // 消息推送渠道与推送目标
+              // 消息推送渠道与推送目标（联动检测 dsh-message-gateway 状态）
               createElement(
                 'div',
                 { style: { display: 'grid', gridTemplateColumns: '1.2fr 1fr', gap: '8px' } },
@@ -1172,10 +1255,16 @@ export function CalendarView(props: { api: ReminderApi; onClose: () => void; loc
                       },
                     },
                     createElement('option', { value: 'none' }, t('push.none', lang)),
-                    createElement('option', { value: 'wecom-aibot' }, t('push.wecom', lang)),
-                    createElement('option', { value: 'telegram' }, t('push.telegram', lang)),
-                    createElement('option', { value: 'discord' }, t('push.discord', lang)),
-                    createElement('option', { value: 'email' }, t('push.email', lang)),
+                    gatewayInfo.hasGateway
+                      ? createElement(
+                          Fragment,
+                          null,
+                          createElement('option', { value: 'wecom-aibot' }, t('push.wecom', lang)),
+                          createElement('option', { value: 'telegram' }, t('push.telegram', lang)),
+                          createElement('option', { value: 'discord' }, t('push.discord', lang)),
+                          createElement('option', { value: 'email' }, t('push.email', lang)),
+                        )
+                      : createElement('option', { value: 'none', disabled: true }, '⚠️ 需安装消息网关插件 (dsh-message-gateway)')
                   ),
                 ),
                 createElement(

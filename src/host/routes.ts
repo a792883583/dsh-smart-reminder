@@ -1,6 +1,6 @@
 /**
  * Web API 路由注册（供 Client 侧日历视图与数据交互调用）。
- * 增加：打勾完成切换、一键推迟 (Snooze)、以及 .ics 标准日历导出。
+ * 增加：环境依赖检测（自动检测宿主是否已装配 dsh-message-gateway 及其支持的渠道）。
  * @module dsh-smart-reminder/host/routes
  */
 
@@ -13,7 +13,31 @@ export function registerReminderRoutes(ctx: Context, store: ReminderStore): () =
   const server = (ctx as any).webServer
   if (!server) return () => {}
 
-  // 1. 获取所有提醒事项
+  // 1. 获取环境能力状态（是否已安装并连接消息网关）
+  const d0 = server.register({
+    kind: 'exact',
+    path: '/api/reminders/gateway-status',
+    handler: async (_req: any, res: any) => {
+      let hasGateway = false
+      let platforms: string[] = []
+
+      try {
+        const tools = (ctx as any).tools
+        if (tools && typeof tools.get === 'function') {
+          const sendTool = tools.get('send_chat_message')
+          if (sendTool) {
+            hasGateway = true
+            platforms = ['wecom-aibot', 'telegram', 'discord', 'email']
+          }
+        }
+      } catch {}
+
+      res.writeHead(200, { 'content-type': 'application/json; charset=utf-8' })
+      res.end(JSON.stringify({ ok: true, hasGateway, platforms }))
+    },
+  })
+
+  // 2. 获取所有提醒事项
   const d1 = server.register({
     kind: 'exact',
     path: '/api/reminders/list',
@@ -24,7 +48,7 @@ export function registerReminderRoutes(ctx: Context, store: ReminderStore): () =
     },
   })
 
-  // 2. 创建或更新提醒事项
+  // 3. 创建或更新提醒事项
   const d2 = server.register({
     kind: 'exact',
     path: '/api/reminders/save',
@@ -61,7 +85,7 @@ export function registerReminderRoutes(ctx: Context, store: ReminderStore): () =
     },
   })
 
-  // 3. 切换事项打勾完成状态 (Toggle Complete)
+  // 4. 切换事项打勾完成状态 (Toggle Complete)
   const d3 = server.register({
     kind: 'exact',
     path: '/api/reminders/toggle-complete',
@@ -87,7 +111,7 @@ export function registerReminderRoutes(ctx: Context, store: ReminderStore): () =
     },
   })
 
-  // 4. 一键推迟 (Snooze)
+  // 5. 一键推迟 (Snooze)
   const d4 = server.register({
     kind: 'exact',
     path: '/api/reminders/snooze',
@@ -114,7 +138,7 @@ export function registerReminderRoutes(ctx: Context, store: ReminderStore): () =
     },
   })
 
-  // 5. 删除提醒事项
+  // 6. 删除提醒事项
   const d5 = server.register({
     kind: 'exact',
     path: '/api/reminders/delete',
@@ -145,7 +169,7 @@ export function registerReminderRoutes(ctx: Context, store: ReminderStore): () =
     },
   })
 
-  // 6. 导出标准 .ics 日历文件
+  // 7. 导出标准 .ics 日历文件
   const d6 = server.register({
     kind: 'exact',
     path: '/api/reminders/export.ics',
@@ -160,7 +184,7 @@ export function registerReminderRoutes(ctx: Context, store: ReminderStore): () =
     },
   })
 
-  // 7. 测试系统弹窗通知
+  // 8. 测试系统弹窗通知
   const d7 = server.register({
     kind: 'exact',
     path: '/api/reminders/test-notify',
@@ -176,6 +200,7 @@ export function registerReminderRoutes(ctx: Context, store: ReminderStore): () =
   })
 
   return () => {
+    d0()
     d1()
     d2()
     d3()
