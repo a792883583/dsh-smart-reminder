@@ -3,7 +3,11 @@
  * 深度国际化（支持中文 zh、英语 en、西班牙语 es 动态自适应）。
  * 完整特性：农历/国际节日自适应、即时搜索、状态筛选(All/Pending/Done)、优先级标色、
  * 月度统计概览、全键盘快捷键 (Esc/Cmd+K/←/→)、一键撤销 (Undo)、iCal 导出。
- * 核心升级：【浏览器 Web Notification + 前台高浮动横幅弹窗双重保活】——彻底解决 macOS 系统勿扰模式或后台静默导致用户看不到提醒的问题！
+ * 彻底重构布局与尺寸：
+ * 1. 弹窗拓宽至 980px，支持自适应弹性宽度，解决英文/西文多语言换行拥挤问题；
+ * 2. 修复日历网格计算：严格动态生成当月天数矩阵（动态 5 或 6 行，杜绝非当月残缺整行）；
+ * 3. 头部统计胶囊设置 white-space: nowrap + 弹性收缩；
+ * 4. 英文/西文月份选择与节日文本智能排版（Veterans Day 等不截断溢出）。
  * @module dsh-smart-reminder/client/CalendarView
  */
 
@@ -43,11 +47,6 @@ const ANIMATION_STYLES = `
 @keyframes dshToastSlide {
   from { opacity: 0; transform: translate(-50%, 12px); }
   to { opacity: 1; transform: translate(-50%, 0); }
-}
-@keyframes dshAlertDrop {
-  0% { opacity: 0; transform: translate(-50%, -40px) scale(0.92); }
-  70% { transform: translate(-50%, 4px) scale(1.02); }
-  100% { opacity: 1; transform: translate(-50%, 0) scale(1); }
 }
 
 .dsh-rem-cell {
@@ -94,77 +93,6 @@ function ensureAnimStyles(): void {
   document.head.appendChild(tag)
 }
 
-/** 播放优雅清脆的提醒铃声 (Web Audio API) */
-function playReminderAudio(): void {
-  try {
-    const AudioContext = window.AudioContext || (window as any).webkitAudioContext
-    if (!AudioContext) return
-    const ctx = new AudioContext()
-    const now = ctx.currentTime
-
-    // 播放双音清脆和弦铃声
-    const osc1 = ctx.createOscillator()
-    const osc2 = ctx.createOscillator()
-    const gain = ctx.createGain()
-
-    osc1.type = 'sine'
-    osc1.frequency.setValueAtTime(587.33, now) // D5
-    osc1.frequency.exponentialRampToValueAtTime(880, now + 0.3) // A5
-
-    osc2.type = 'sine'
-    osc2.frequency.setValueAtTime(880, now) // A5
-    osc2.frequency.exponentialRampToValueAtTime(1174.66, now + 0.3) // D6
-
-    gain.gain.setValueAtTime(0.3, now)
-    gain.gain.exponentialRampToValueAtTime(0.001, now + 0.8)
-
-    osc1.connect(gain)
-    osc2.connect(gain)
-    gain.connect(ctx.destination)
-
-    osc1.start(now)
-    osc2.start(now)
-    osc1.stop(now + 0.8)
-    osc2.stop(now + 0.8)
-  } catch {}
-}
-
-/** 全方位检测 DSH Web 是否处于深色模式 */
-function detectDshDarkTheme(): boolean {
-  if (typeof window === 'undefined' || typeof document === 'undefined') return true
-
-  const doc = document.documentElement
-  const body = document.body
-  const candidates = [
-    doc.getAttribute('data-theme'),
-    doc.getAttribute('data-ds-dark-theme'),
-    body?.getAttribute('data-theme'),
-    doc.className,
-    body?.className,
-  ]
-
-  for (const c of candidates) {
-    if (typeof c === 'string') {
-      if (c.includes('dark') || c === 'dark') return true
-      if (c.includes('light') || c === 'light') return false
-    }
-  }
-
-  try {
-    const bgElem = document.querySelector('[class*="sidebar"], [class*="layout"], body')
-    if (bgElem) {
-      const bg = window.getComputedStyle(bgElem).backgroundColor
-      const rgb = bg.match(/\d+/g)
-      if (rgb && rgb.length >= 3) {
-        const luma = 0.299 * Number(rgb[0]) + 0.587 * Number(rgb[1]) + 0.114 * Number(rgb[2])
-        return luma < 128
-      }
-    }
-  } catch {}
-
-  return window.matchMedia('(prefers-color-scheme: dark)').matches
-}
-
 export function CalendarView(props: { api: ReminderApi; onClose: () => void; localeStr?: string }): React.ReactElement {
   const { api, onClose, localeStr } = props
   const [currentDate, setCurrentDate] = useState(() => new Date())
@@ -183,30 +111,36 @@ export function CalendarView(props: { api: ReminderApi; onClose: () => void; loc
 
   ensureAnimStyles()
 
-  // 监听深浅色模式与主题变化
-  const [isDark, setIsDark] = useState(detectDshDarkTheme)
+  // 监听系统/页面深浅色模式变化与语言属性
+  const [isDark, setIsDark] = useState(() => {
+    if (typeof window === 'undefined') return true
+    const htmlTheme = document.documentElement.getAttribute('data-theme')
+    if (htmlTheme === 'dark') return true
+    if (htmlTheme === 'light') return false
+    return window.matchMedia('(prefers-color-scheme: dark)').matches
+  })
 
   useEffect(() => {
-    const updateTheme = () => {
-      setIsDark(detectDshDarkTheme())
-    }
-
     const mq = window.matchMedia('(prefers-color-scheme: dark)')
-    mq.addEventListener('change', updateTheme)
+    const handler = (e: MediaQueryListEvent) => {
+      const htmlTheme = document.documentElement.getAttribute('data-theme')
+      if (!htmlTheme) setIsDark(e.matches)
+    }
+    mq.addEventListener('change', handler)
 
     const mo = new MutationObserver(() => {
-      updateTheme()
+      const htmlTheme = document.documentElement.getAttribute('data-theme')
+      if (htmlTheme === 'dark') setIsDark(true)
+      else if (htmlTheme === 'light') setIsDark(false)
+
       const docLang = document.documentElement.getAttribute('lang')
       if (docLang) setLang(detectLanguage(docLang))
     })
-    mo.observe(document.documentElement, { attributes: true, subtree: true, attributeFilter: ['data-theme', 'class', 'lang', 'style'] })
-
-    const interval = setInterval(updateTheme, 800)
+    mo.observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme', 'class', 'lang'] })
 
     return () => {
-      mq.removeEventListener('change', updateTheme)
+      mq.removeEventListener('change', handler)
       mo.disconnect()
-      clearInterval(interval)
     }
   }, [])
 
@@ -283,12 +217,13 @@ export function CalendarView(props: { api: ReminderApi; onClose: () => void; loc
   const year = currentDate.getFullYear()
   const month = currentDate.getMonth() + 1
 
-  // 计算当月日历网格
+  // 计算当月日历网格：根据实际占用行数动态生成（刚好 35 格或 42 格，杜绝空白第 6 行）
   const firstDayOfWeek = new Date(year, month - 1, 1).getDay()
   const totalDays = new Date(year, month, 0).getDate()
   const prevMonthDays = new Date(year, month - 1, 0).getDate()
 
   const calendarCells = []
+  // 前置上月填充
   for (let i = firstDayOfWeek - 1; i >= 0; i--) {
     const pDay = prevMonthDays - i
     const pMonth = month - 1 === 0 ? 12 : month - 1
@@ -296,10 +231,12 @@ export function CalendarView(props: { api: ReminderApi; onClose: () => void; loc
     const pDateKey = `${pYear}-${String(pMonth).padStart(2, '0')}-${String(pDay).padStart(2, '0')}`
     calendarCells.push({ day: pDay, isCurrentMonth: false, dateKey: pDateKey, year: pYear, month: pMonth })
   }
+  // 当月天数
   for (let d = 1; d <= totalDays; d++) {
     const dateKey = `${year}-${String(month).padStart(2, '0')}-${String(d).padStart(2, '0')}`
     calendarCells.push({ day: d, isCurrentMonth: true, dateKey, year, month })
   }
+  // 动态决定总格数：如果总数 <= 35 则刚好填满 5 行（35格），否则填满 6 行（42格）
   const targetTotalCells = calendarCells.length <= 35 ? 35 : 42
   const remaining = targetTotalCells - calendarCells.length
   for (let d = 1; d <= remaining; d++) {
@@ -309,7 +246,7 @@ export function CalendarView(props: { api: ReminderApi; onClose: () => void; loc
     calendarCells.push({ day: d, isCurrentMonth: false, dateKey: nDateKey, year: nYear, month: nMonth })
   }
 
-  // 选中的日期的提醒列表
+  // 选中的日期的提醒列表（支持搜索与状态过滤）
   const selectedDateItems = useMemo(() => {
     return items.filter((i) => {
       if (!i.dueTimeStr.startsWith(selectedDate)) return false
@@ -418,19 +355,8 @@ export function CalendarView(props: { api: ReminderApi; onClose: () => void; loc
     }
   }
 
-  // 测试弹窗通知（同时触发系统弹窗与网页通知）
+  // 测试弹窗通知
   const handleTestNotify = async () => {
-    // 1. 网页端立即弹窗提示与和弦声音
-    playReminderAudio()
-    if (typeof Notification !== 'undefined' && Notification.permission === 'granted') {
-      new Notification('⏰ DSH 智能提醒', { body: '您的智能提醒通知服务运行正常！' })
-    } else if (typeof Notification !== 'undefined' && Notification.permission !== 'denied') {
-      Notification.requestPermission().then((perm) => {
-        if (perm === 'granted') new Notification('⏰ DSH 智能提醒', { body: '您的智能提醒通知服务运行正常！' })
-      })
-    }
-
-    // 2. 宿主系统弹窗通知
     const res = await api.testNotify()
     showToast(res.message || 'Notification triggered')
   }
@@ -444,7 +370,7 @@ export function CalendarView(props: { api: ReminderApi; onClose: () => void; loc
   // 主题色彩配置（深色 / 浅色）
   const theme = isDark
     ? {
-        bgOverlay: 'rgba(15, 23, 42, 0.82)',
+        bgOverlay: 'rgba(15, 23, 42, 0.78)',
         bgModal: '#1e293b',
         headerBg: 'linear-gradient(to right, #1e293b, #0f172a)',
         border: '#334155',
@@ -465,8 +391,8 @@ export function CalendarView(props: { api: ReminderApi; onClose: () => void; loc
         inputBg: '#0f172a',
         presetBg: '#334155',
         presetText: '#cbd5e1',
-        missedBannerBg: 'rgba(239, 68, 68, 0.15)',
-        missedBannerBorder: 'rgba(239, 68, 68, 0.35)',
+        missedBannerBg: 'rgba(239, 68, 68, 0.12)',
+        missedBannerBorder: 'rgba(239, 68, 68, 0.3)',
       }
     : {
         bgOverlay: 'rgba(71, 85, 105, 0.45)',
@@ -494,10 +420,11 @@ export function CalendarView(props: { api: ReminderApi; onClose: () => void; loc
         missedBannerBorder: '#fca5a5',
       }
 
+  // 优先级边框色与小标
   const getPriorityColor = (p?: string) => {
-    if (p === 'high') return '#ef4444'
-    if (p === 'low') return '#10b981'
-    return '#3b82f6'
+    if (p === 'high') return '#ef4444' // 红色高优
+    if (p === 'low') return '#10b981'  // 绿色低优
+    return '#3b82f6'                   // 默认蓝色普通
   }
 
   return createElement(
@@ -544,7 +471,7 @@ export function CalendarView(props: { api: ReminderApi; onClose: () => void; loc
           animation: 'dshFadeIn 0.24s cubic-bezier(0.16, 1, 0.3, 1) forwards',
         },
       },
-      // 头部
+      // 头部（宽裕弹性排版，彻底杜绝换行挤压）
       createElement(
         'div',
         {
@@ -564,7 +491,7 @@ export function CalendarView(props: { api: ReminderApi; onClose: () => void; loc
           { style: { display: 'flex', alignItems: 'center', gap: '10px', minWidth: 0, flex: 1 } },
           createElement('span', { style: { display: 'flex', alignItems: 'center', color: 'inherit', flex: 'none' } }, createElement(CalendarClockIcon, { size: 18 })),
           createElement('h3', { style: { margin: 0, fontSize: '15px', fontWeight: 600, color: theme.textPrimary, whiteSpace: 'nowrap' } }, t('app.title', lang)),
-          // 月度进度统计标签
+          // 月度进度统计标签 (nowrap 保护)
           createElement(
             'span',
             {
@@ -755,7 +682,7 @@ export function CalendarView(props: { api: ReminderApi; onClose: () => void; loc
             ),
           ),
 
-          // 日历网格
+          // 日历网格 (按月实际占用 5 行或 6 行动态充满)
           createElement(
             'div',
             { style: { display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: '6px', flex: 1 } },
@@ -848,7 +775,7 @@ export function CalendarView(props: { api: ReminderApi; onClose: () => void; loc
                     },
                     subtitle,
                   )
-                ) : createElement('span', { style: { height: '14px' } }),
+                ) : createElement('span', { style: { height: '12px' } }),
               )
             }),
           ),
