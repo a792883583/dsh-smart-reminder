@@ -376,6 +376,24 @@ export function CalendarView(props: { api: ReminderApi; onClose: () => void; loc
   }
 
   const handleTestNotify = async () => {
+    // 1. 尝试触发浏览器原生系统级通知 (由 Chrome 弹出)
+    if (typeof Notification !== 'undefined') {
+      if (Notification.permission === 'granted') {
+        new Notification('⏰ DSH 智能提醒', {
+          body: '您的智能提醒通知与声音服务运行正常！',
+        })
+      } else if (Notification.permission !== 'denied') {
+        Notification.requestPermission().then((perm) => {
+          if (perm === 'granted') {
+            new Notification('⏰ DSH 智能提醒', {
+              body: '您的智能提醒通知与声音服务运行正常！',
+            })
+          }
+        })
+      }
+    }
+
+    // 2. 触发宿主底层通知与系统提示音 (afplay)
     const res = await api.testNotify()
     showToast(res.message || 'Notification triggered')
   }
