@@ -4,9 +4,7 @@
  * 完整特性：农历/国际节日自适应、即时搜索、状态筛选(All/Pending/Done)、优先级标色、
  * 月度统计概览、全键盘快捷键 (Esc/Cmd+K/←/→)、一键撤销 (Undo)、iCal 导出。
  * 
- * 核心升级：【到期强提醒悬浮卡片 + 系统蜂鸣音】
- * 彻底解决 macOS 系统勿扰模式、专注模式或 TCC 权限静默导致无法弹出横幅的问题：
- * 只要 DSH Web 网页开着，到点/测试时，页面右上角会立即弹出【高亮提醒悬浮卡片】，并伴随蜂鸣提示音，100% 绝对看得见！
+ * 核心升级：【自动申请并唤醒 Chrome 原生系统级桌面横幅通知（与微信/企微图二同款系统通知）】
  * @module dsh-smart-reminder/client/CalendarView
  */
 
@@ -109,14 +107,14 @@ function playReminderAudio(): void {
     const gain = ctx.createGain()
 
     osc1.type = 'sine'
-    osc1.frequency.setValueAtTime(587.33, now) // D5
-    osc1.frequency.exponentialRampToValueAtTime(880, now + 0.3) // A5
+    osc1.frequency.setValueAtTime(587.33, now)
+    osc1.frequency.exponentialRampToValueAtTime(880, now + 0.3)
 
     osc2.type = 'sine'
-    osc2.frequency.setValueAtTime(880, now) // A5
-    osc2.frequency.exponentialRampToValueAtTime(1174.66, now + 0.3) // D6
+    osc2.frequency.setValueAtTime(880, now)
+    osc2.frequency.exponentialRampToValueAtTime(1174.66, now + 0.3)
 
-    gain.gain.setValueAtTime(0.3, now)
+    gain.gain.setValueAtTime(0.35, now)
     gain.gain.exponentialRampToValueAtTime(0.001, now + 0.8)
 
     osc1.connect(gain)
@@ -128,6 +126,32 @@ function playReminderAudio(): void {
     osc1.stop(now + 0.8)
     osc2.stop(now + 0.8)
   } catch {}
+}
+
+/** 触发 Chrome / 系统原生右上角横幅通知 (图二同款效果) */
+function triggerNativeSystemNotification(title: string, body: string): void {
+  if (typeof window === 'undefined' || typeof Notification === 'undefined') return
+
+  if (Notification.permission === 'granted') {
+    try {
+      const notif = new Notification(title, {
+        body,
+        icon: 'https://cdn-icons-png.flaticon.com/512/2693/2693507.png', // 高清日历闹钟图标
+        requireInteraction: true,
+        silent: false,
+      })
+      notif.onclick = () => {
+        window.focus()
+        notif.close()
+      }
+    } catch {}
+  } else if (Notification.permission !== 'denied') {
+    Notification.requestPermission().then((perm) => {
+      if (perm === 'granted') {
+        triggerNativeSystemNotification(title, body)
+      }
+    })
+  }
 }
 
 /** 全方位检测 DSH Web 是否处于深色模式 */
@@ -187,6 +211,13 @@ export function CalendarView(props: { api: ReminderApi; onClose: () => void; loc
 
   ensureAnimStyles()
 
+  // 页面加载时自动申请系统原生通知权限
+  useEffect(() => {
+    if (typeof Notification !== 'undefined' && Notification.permission === 'default') {
+      Notification.requestPermission()
+    }
+  }, [])
+
   // 监听深浅色模式与主题变化
   const [isDark, setIsDark] = useState(detectDshDarkTheme)
 
@@ -237,13 +268,16 @@ export function CalendarView(props: { api: ReminderApi; onClose: () => void; loc
     void loadItems()
   }, [loadItems])
 
-  // 前端到期检测（当页面打开时实时触发提醒弹窗与声音）
+  // 前端高精定时器：到点同时触发系统横幅通知 (图二) + 提示音
   useEffect(() => {
     const timer = setInterval(() => {
       const now = Date.now()
       const due = items.find((i) => i.status === 'pending' && i.dueAt <= now)
       if (due && (!activePopup || activePopup.id !== due.id)) {
         playReminderAudio()
+        // 触发右上角系统级原生横幅通知 (Chrome/macOS 图二同款)
+        triggerNativeSystemNotification(`⏰ DSH 智能提醒：${due.title}`, `设定时间：${due.dueTimeStr}${due.description ? `\n备注：${due.description}` : ''}`)
+
         setActivePopup({
           id: due.id,
           title: due.title,
@@ -444,22 +478,10 @@ export function CalendarView(props: { api: ReminderApi; onClose: () => void; loc
 
   const handleTestNotify = async () => {
     playReminderAudio()
-    // 触发右上角高保真悬浮提醒横幅
-    setActivePopup({
-      id: 'test-alarm',
-      title: '测试提醒：开研发周会',
-      desc: '您的 DSH 智能提醒通知与声音服务运行正常！',
-      time: '10:30',
-    })
+    // 1. 触发 Chrome / 系统原生右上角横幅通知 (图二同款效果)
+    triggerNativeSystemNotification('⏰ DSH 智能提醒', '测试通知：您的智能提醒系统通知服务运行正常！')
 
-    if (typeof Notification !== 'undefined' && Notification.permission === 'granted') {
-      new Notification('⏰ DSH 智能提醒', { body: '您的智能提醒通知服务运行正常！' })
-    } else if (typeof Notification !== 'undefined' && Notification.permission !== 'denied') {
-      Notification.requestPermission().then((perm) => {
-        if (perm === 'granted') new Notification('⏰ DSH 智能提醒', { body: '您的智能提醒通知服务运行正常！' })
-      })
-    }
-
+    // 2. 触发宿主底层通知
     const res = await api.testNotify()
     showToast(res.message || 'Notification triggered')
   }
