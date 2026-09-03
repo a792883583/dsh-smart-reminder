@@ -1,6 +1,7 @@
 /**
  * dsh-smart-reminder 浏览器客户端入口：
  * 挂载到左侧侧边栏（位于「消息平台」下方），点击打开现代全屏日历看板与提醒管理器。
+ * 注入 locale 服务，实现全生命周期零闪烁跟随 DSH Web 当前语言。
  * @module dsh-smart-reminder/client
  */
 
@@ -9,6 +10,7 @@ import { createRoot, type Root } from 'react-dom/client'
 import { ReminderApi } from './api.ts'
 import { CalendarView } from './CalendarView.tsx'
 import { CalendarClockIcon } from './icons.tsx'
+import { initI18n, t, useActiveLang } from './i18n.ts'
 
 interface ReminderClientContext {
   effect(fn: () => (() => void) | void, name: string): void
@@ -23,7 +25,8 @@ export const inject = ['locale']
 const BUTTON_STYLE = `
 .dsh-rem-open { display:flex; align-items:center; gap:8px; width:100%; padding:8px 12px;
   border:none; background:transparent; color:inherit; cursor:pointer;
-  font-size:12px; font-weight:500; border-radius:8px; margin-top:2px; box-sizing:border-box; }
+  font-size:12px; font-weight:500; border-radius:8px; margin-top:2px; box-sizing:border-box;
+  transition: all 0.15s ease; }
 .dsh-rem-open:hover { background:rgba(128,128,128,0.1); }
 .dsh-rem-open .icon { font-size:15px; flex:none; display:flex; align-items:center; justify-content:center; }
 .dsh-rem-open .label { flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis;
@@ -42,6 +45,7 @@ function ensureButtonStyle(): void {
 
 function ReminderApp(props: { api: ReminderApi }): React.ReactElement {
   const { api } = props
+  const lang = useActiveLang()
   const [open, setOpen] = useState(false)
   const close = useCallback((): void => setOpen(false), [])
   ensureButtonStyle()
@@ -51,15 +55,19 @@ function ReminderApp(props: { api: ReminderApi }): React.ReactElement {
     null,
     createElement(
       'button',
-      { type: 'button', className: 'dsh-rem-open', title: '智能提醒与农历日历', onClick: () => setOpen(true) },
+      { type: 'button', className: 'dsh-rem-open', title: t('app.title', lang), onClick: () => setOpen(true) },
       createElement('span', { className: 'icon' }, createElement(CalendarClockIcon, { size: 15 })),
-      createElement('span', { className: 'label' }, '智能提醒日历'),
+      createElement('span', { className: 'label' }, t('app.title', lang)),
     ),
     open ? createElement(CalendarView, { api, onClose: close }) : null,
   )
 }
 
 export function apply(ctx: ReminderClientContext): void {
+  try {
+    initI18n(ctx.locale)
+  } catch {}
+
   ctx.effect(() => {
     const host = document.createElement('div')
     host.dataset.reminderHost = ''
@@ -72,11 +80,9 @@ export function apply(ctx: ReminderClientContext): void {
       root.render(createElement(ReminderApp, { api }))
     }
 
-    // 挂载逻辑：支持多种选择器，持续重试
     const mount = (): boolean => {
       if (host.isConnected) return true
 
-      // 1. 尝试直接挂在 [data-gateway-host] 下方（消息平台正下方）
       const gwHost = document.querySelector<HTMLElement>('[data-gateway-host]')
       if (gwHost !== null && gwHost.parentElement !== null) {
         gwHost.after(host)
@@ -84,7 +90,6 @@ export function apply(ctx: ReminderClientContext): void {
         return true
       }
 
-      // 2. 尝试挂在「消息平台」按钮外层容器
       const gwBtn = document.querySelector<HTMLElement>('.dsh-gw-open')
       if (gwBtn !== null && gwBtn.parentElement !== null && gwBtn.parentElement.parentElement !== null) {
         gwBtn.parentElement.after(host)
@@ -92,7 +97,6 @@ export function apply(ctx: ReminderClientContext): void {
         return true
       }
 
-      // 3. 兜底：挂在「新会话」按钮下方
       const newSessionBtn = document.querySelector<HTMLElement>('[class*="newSession"]')
       if (newSessionBtn !== null && newSessionBtn.parentElement !== null) {
         newSessionBtn.after(host)

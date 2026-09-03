@@ -1,24 +1,66 @@
 /**
- * 多语言国际化字典与 Hooks（支持中文 zh、英语 en、西班牙语 es 动态切换与随系统/用户设置自适应）。
- * 完整覆盖推送渠道与推送目标多语言字典。
+ * 三语文案（中 / 英 / 西）。
+ * 深度对齐 DSH 官方国际化：跟随 ctx.locale.subscribe 实时订阅 + useSyncExternalStore 响应式更新。
+ * 彻底移除不可靠的本地 state，支持全生命周期零闪烁跟随 DSH Web 当前语言。
  * @module dsh-smart-reminder/client/i18n
  */
 
+import { useSyncExternalStore } from 'react'
+
 export type Lang = 'zh' | 'en' | 'es'
+
+let currentLocale = 'zh'
+const listeners = new Set<() => void>()
+
+function notify(): void {
+  for (const fn of listeners) {
+    try { fn() } catch {}
+  }
+}
+
+export function initI18n(localeService?: { getLocale(): { active: string }; subscribe(fn: () => void): () => void }): void {
+  if (localeService && typeof localeService.getLocale === 'function') {
+    try {
+      currentLocale = localeService.getLocale().active || 'zh'
+      localeService.subscribe(() => {
+        currentLocale = localeService.getLocale().active || 'zh'
+        notify()
+      })
+    } catch {}
+  } else if (typeof navigator !== 'undefined') {
+    currentLocale = navigator.language || 'zh'
+  }
+}
+
+export function getActiveLang(): Lang {
+  const l = (currentLocale || (typeof navigator !== 'undefined' ? navigator.language : 'zh')).toLowerCase()
+  if (l.startsWith('zh')) return 'zh'
+  if (l.startsWith('es')) return 'es'
+  return 'en'
+}
+
+export function useActiveLang(): Lang {
+  return useSyncExternalStore(
+    (onStoreChange) => {
+      listeners.add(onStoreChange)
+      return () => listeners.delete(onStoreChange)
+    },
+    () => getActiveLang(),
+  )
+}
 
 const DICT: Record<string, Record<Lang, string>> = {
   // 标题与通用
-  'app.title': { zh: '智能提醒日历', en: 'Smart Reminder & Calendar', es: 'Calendario y Recordatorios' },
-  'app.subtitle': { zh: '支持农历节假日、系统弹窗通知、待办 Checklist 与 iCal 导出', en: 'Lunar calendar, holidays, system notifications, to-do checklist and iCal export', es: 'Calendario lunar, festivos, notificaciones, lista de tareas y exportación iCal' },
-  'btn.testNotify': { zh: '🔔 测试通知', en: '🔔 Test Notification', es: '🔔 Probar Notificación' },
-  'btn.exportIcs': { zh: '📥 导出日历 (.ics)', en: '📥 Export iCal (.ics)', es: '📥 Exportar iCal (.ics)' },
+  'app.title': { zh: '智能提醒日历', en: 'Smart Reminder Calendar', es: 'Calendario y Recordatorios' },
+  'btn.testNotify': { zh: '🔔 测试通知', en: '🔔 Test', es: '🔔 Probar' },
+  'btn.exportIcs': { zh: '📥 导出日历 (.ics)', en: '📥 Export iCal', es: '📥 Exportar iCal' },
   'btn.close': { zh: '关闭', en: 'Close', es: 'Cerrar' },
   'btn.today': { zh: '今天', en: 'Today', es: 'Hoy' },
   'btn.prevMonth': { zh: '‹ 上月', en: '‹ Prev', es: '‹ Ant.' },
   'btn.nextMonth': { zh: '下月 ›', en: 'Next ›', es: 'Sig. ›' },
   'btn.newReminder': { zh: '+ 新建提醒', en: '+ New Reminder', es: '+ Nuevo Recordatorio' },
   'btn.cancel': { zh: '取消', en: 'Cancel', es: 'Cancelar' },
-  'btn.save': { zh: '保存设定', en: 'Save Reminder', es: 'Guardar' },
+  'btn.save': { zh: '保存设定', en: 'Save', es: 'Guardar' },
   'btn.undo': { zh: '撤销', en: 'Undo', es: 'Deshacer' },
   'btn.completeAll': { zh: '一键全部完成', en: 'Complete All', es: 'Completar todo' },
 
@@ -50,24 +92,31 @@ const DICT: Record<string, Record<Lang, string>> = {
   'repeat.weekly': { zh: '每周重复', en: 'Weekly', es: 'Semanalmente' },
   'repeat.monthly': { zh: '每月重复', en: 'Monthly', es: 'Mensualmente' },
 
+  // 推送渠道
+  'push.label': { zh: '消息推送渠道', en: 'Push Channel', es: 'Canal de Notificación' },
+  'push.none': { zh: '🖥️ 仅系统/网页弹窗', en: '🖥️ System/Web Only', es: '🖥️ Solo Sistema/Web' },
+  'push.wecom': { zh: '💬 企业微信 (WeCom)', en: '💬 WeCom AI Bot', es: '💬 WeCom' },
+  'push.telegram': { zh: '✈️ Telegram', en: '✈️ Telegram', es: '✈️ Telegram' },
+  'push.discord': { zh: '🎮 Discord', en: '🎮 Discord', es: '🎮 Discord' },
+  'push.email': { zh: '✉️ 邮件 (Email)', en: '✉️ Email', es: '✉️ Correo' },
+  'push.targetLabel': { zh: '推送目标 (UserID/群ID/邮箱)', en: 'Target (User/Channel/Email)', es: 'Destinatario (Usuario/Canal/Email)' },
+  'push.targetPlaceholder': { zh: '如：JADEN.T、群 ID 或邮箱（留空默认当前会话）', en: 'e.g. UserID or Channel ID', es: 'ej. ID de usuario o canal' },
+
   // 弹窗表单
   'form.title': { zh: '设定提醒事项', en: 'Set Reminder', es: 'Configurar Recordatorio' },
   'form.editTitle': { zh: '编辑提醒事项', en: 'Edit Reminder', es: 'Editar Recordatorio' },
   'form.contentLabel': { zh: '事项内容', en: 'Title / Content', es: 'Título / Asunto' },
   'form.contentPlaceholder': { zh: '请输入提醒内容（如：下午研发开会、提交周报）', en: 'Enter reminder title (e.g., Team meeting, submit report)', es: 'Título del recordatorio (ej. Reunión de equipo, enviar informe)' },
   'form.timeLabel': { zh: '提醒时间（点选）', en: 'Due Time (Select)', es: 'Fecha y Hora (Seleccionar)' },
-  'form.pushLabel': { zh: '消息推送渠道', en: 'Push Channel', es: 'Canal de Notificación' },
-  'form.pushTargetLabel': { zh: '推送目标 (UserID/群ID/邮箱)', en: 'Target (User/Channel/Email)', es: 'Destinatario (Usuario/Canal/Email)' },
-  'form.pushTargetPlaceholder': { zh: '如：JADEN.T、群 ID 或邮箱（留空默认当前会话）', en: 'e.g. UserID or Channel ID', es: 'ej. ID de usuario o canal' },
-  'push.none': { zh: '🖥️ 仅系统/网页弹窗', en: '🖥️ System/Web Only', es: '🖥️ Solo Sistema/Web' },
-  'push.wecom': { zh: '💬 企业微信 (WeCom)', en: '💬 WeCom AI Bot', es: '💬 WeCom' },
-  'push.telegram': { zh: '✈️ Telegram', en: '✈️ Telegram', es: '✈️ Telegram' },
-  'push.discord': { zh: '🎮 Discord', en: '🎮 Discord', es: '🎮 Discord' },
-  'push.email': { zh: '✉️ 邮件 (Email)', en: '✉️ Email', es: '✉️ Correo' },
   'form.descLabel': { zh: '详细备注 / 链接 (可选)', en: 'Notes / Links (Optional)', es: 'Notas / Enlaces (Opcional)' },
   'form.descPlaceholder': { zh: '可填写附带的会议链接、文档或注意事项', en: 'Optional meeting links, docs, or notes', es: 'Enlaces de reunión opcionales, notas o documentos' },
 
-  // 状态与提示
+  // 提示与说明
+  'drag.hint': {
+    zh: '💡 可按住卡片直接拖拽到左侧日历某个日期中快速改期',
+    en: '💡 Drag and drop card onto any date cell to reschedule',
+    es: '💡 Arrastre la tarjeta a cualquier fecha para reprogramar',
+  },
   'status.done': { zh: '已响铃', en: 'Triggered', es: 'Notificado' },
   'status.pending': { zh: '待提醒', en: 'Pending', es: 'Pendiente' },
   'status.completed': { zh: '已完成', en: 'Completed', es: 'Completado' },
@@ -78,7 +127,7 @@ const DICT: Record<string, Record<Lang, string>> = {
   'toast.snoozed': { zh: '⏰ 已推迟', en: '⏰ Postponed', es: '⏰ Pospuesto' },
   'toast.exported': { zh: '📅 已开始下载 .ics 日历文件', en: '📅 Downloading .ics calendar file', es: '📅 Descargando archivo .ics' },
   'banner.missed': { zh: '⚠️ 离线期间有 {n} 项提醒已逾期（已自动补发）', en: '⚠️ {n} missed reminder(s) while offline (caught up)', es: '⚠️ {n} recordatorio(s) vencido(s) mientras estaba desconectado' },
-  'stats.summary': { zh: '本月 {total} 项 · 完成率 {rate}%', en: '{total} tasks this month · {rate}% done', es: '{total} tareas este mes · {rate}% completado' },
+  'stats.summary': { zh: '本月 {total} 项 · 完成率 {rate}%', en: '{total} tasks · {rate}% done', es: '{total} tareas · {rate}% listo' },
 }
 
 /** 国际通用公历节日（英文与西文） */
@@ -97,13 +146,6 @@ export const GLOBAL_SOLAR_FESTIVALS: Record<string, { en: string; es: string }> 
   '1224': { en: 'Christmas Eve', es: 'Nochebuena' },
   '1225': { en: 'Christmas', es: 'Navidad' },
   '1231': { en: "New Year's Eve", es: 'Nochevieja' },
-}
-
-export function detectLanguage(localeStr?: string): Lang {
-  const l = (localeStr || (typeof navigator !== 'undefined' ? navigator.language : 'zh')).toLowerCase()
-  if (l.startsWith('zh')) return 'zh'
-  if (l.startsWith('es')) return 'es'
-  return 'en'
 }
 
 export function t(key: string, lang: Lang, params?: Record<string, string | number>): string {
