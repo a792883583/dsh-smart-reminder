@@ -1,5 +1,6 @@
 /**
  * 多语言国际化字典与 Hooks（支持中文 zh、英语 en、西班牙语 es 动态切换与随系统/用户设置自适应）。
+ * 完整覆盖推送渠道与推送目标多语言字典。
  * @module dsh-smart-reminder/client/i18n
  */
 
@@ -54,6 +55,14 @@ const DICT: Record<string, Record<Lang, string>> = {
   'form.contentLabel': { zh: '事项内容', en: 'Title / Content', es: 'Título / Asunto' },
   'form.contentPlaceholder': { zh: '请输入提醒内容（如：下午研发开会、提交周报）', en: 'Enter reminder title (e.g., Team meeting, submit report)', es: 'Título del recordatorio (ej. Reunión de equipo, enviar informe)' },
   'form.timeLabel': { zh: '提醒时间（点选）', en: 'Due Time (Select)', es: 'Fecha y Hora (Seleccionar)' },
+  'form.pushLabel': { zh: '消息推送渠道', en: 'Push Channel', es: 'Canal de Notificación' },
+  'form.pushTargetLabel': { zh: '推送目标 (UserID/群ID/邮箱)', en: 'Target (User/Channel/Email)', es: 'Destinatario (Usuario/Canal/Email)' },
+  'form.pushTargetPlaceholder': { zh: '如：JADEN.T、群 ID 或邮箱（留空默认当前会话）', en: 'e.g. UserID or Channel ID', es: 'ej. ID de usuario o canal' },
+  'push.none': { zh: '🖥️ 仅系统/网页弹窗', en: '🖥️ System/Web Only', es: '🖥️ Solo Sistema/Web' },
+  'push.wecom': { zh: '💬 企业微信 (WeCom)', en: '💬 WeCom AI Bot', es: '💬 WeCom' },
+  'push.telegram': { zh: '✈️ Telegram', en: '✈️ Telegram', es: '✈️ Telegram' },
+  'push.discord': { zh: '🎮 Discord', en: '🎮 Discord', es: '🎮 Discord' },
+  'push.email': { zh: '✉️ 邮件 (Email)', en: '✉️ Email', es: '✉️ Correo' },
   'form.descLabel': { zh: '详细备注 / 链接 (可选)', en: 'Notes / Links (Optional)', es: 'Notas / Enlaces (Opcional)' },
   'form.descPlaceholder': { zh: '可填写附带的会议链接、文档或注意事项', en: 'Optional meeting links, docs, or notes', es: 'Enlaces de reunión opcionales, notas o documentos' },
 
