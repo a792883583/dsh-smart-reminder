@@ -72,27 +72,19 @@ export function sendSystemNotification(opts: NotificationOptions): Promise<boole
         })
       }
     } else if (currentPlatform === 'win32') {
-      const safeTitle = title.replace(/[<>&"']/g, '')
-      const safeMessage = message.replace(/[<>&"']/g, '')
+      const safeTitle = title.replace(/[`"]/g, '')
+      const safeMessage = message.replace(/[`"]/g, '')
       const psScript = `
-[Windows.UI.Notifications.ToastNotificationManager, Windows.UI.Notifications, ContentType = WindowsRuntime] > $null
-[Windows.Data.Xml.Dom.XmlDocument, Windows.Data.Xml.Dom.XmlDocument, ContentType = WindowsRuntime] > $null
-$xml = @"
-<toast scenario="reminder">
-  <visual>
-    <binding template="ToastGeneric">
-      <text>${safeTitle}</text>
-      <text>${safeMessage}</text>
-    </binding>
-  </visual>
-  <audio src="ms-winsoundevent:Notification.Reminder" loop="false"/>
-</toast>
-"@
-$doc = [Windows.Data.Xml.Dom.XmlDocument]::new()
-$doc.LoadXml($xml)
-$toast = [Windows.UI.Notifications.ToastNotification]::new($doc)
-$toast.Priority = [Windows.UI.Notifications.ToastNotificationPriority]::High
-[Windows.UI.Notifications.ToastNotificationManager]::CreateToastNotifier("{1AC14E77-02E7-4E5D-B744-2EB1AE5198B7}\\WindowsPowerShell\\v1.0\\powershell.exe").Show($toast)
+Add-Type -AssemblyName System.Windows.Forms
+$notify = New-Object System.Windows.Forms.NotifyIcon
+$notify.Icon = [System.Drawing.SystemIcons]::Information
+$notify.BalloonTipTitle = "${safeTitle}"
+$notify.BalloonTipText = "${safeMessage}"
+$notify.BalloonTipIcon = [System.Windows.Forms.ToolTipIcon]::Info
+$notify.Visible = $true
+$notify.ShowBalloonTip(10000)
+Start-Sleep -Seconds 2
+$notify.Dispose()
 `
       const base64Script = Buffer.from(psScript, 'utf16le').toString('base64')
       exec(`powershell -NoProfile -NonInteractive -EncodedCommand ${base64Script}`, (err) => {
