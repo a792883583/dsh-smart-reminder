@@ -19,6 +19,7 @@ Plugin universal de recordatorios inteligentes, calendario lunar y lista de tare
 1. **Acceso Rápido en la Barra Lateral**: Integrado directamente debajo de "Message Gateway" con un icono lineal monocromático alineado a la perfección.
 2. **Notificaciones Nativas del Sistema**:
    - 🔔 Integración nativa con los banners del Centro de Notificaciones de macOS junto con el sonido cristalino 'Glass'.
+   - 🪟 Compatibilidad total con notificaciones Toast de Windows 10/11 (`scenario="reminder"` + `Priority=High`), con banners flotantes y alertas sonoras incluso con el Asistente de Concentración activo.
 3. **Reprogramación Arrastrar y Soltar (Drag & Drop)**:
    - 🖱️ Arrastre cualquier tarjeta de recordatorio de la lista derecha y suéltela en cualquier celda de fecha para reprogramarla al instante.
 4. **Edición Rápida (In-Place Edit)**:

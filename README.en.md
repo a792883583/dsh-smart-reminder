@@ -19,6 +19,7 @@ Universal calendar reminder, lunar calendar dashboard, and to-do checklist plugi
 1. **Seamless Sidebar Navigation**: Embedded right below "Message Gateway" with an official monochrome outline icon.
 2. **Native Desktop Banners**:
    - 🔔 Deeply integrated with macOS native notification center banners paired with the crisp 'Glass' chime.
+   - 🪟 Full Windows 10/11 Toast Notification support (`scenario="reminder"` + `Priority=High`), providing instant popup banners and sound alerts even when Focus Assist (Priority Only) is active.
 3. **Drag & Drop Rescheduling**:
    - 🖱️ Directly click and drag any reminder card from the right list and drop it onto any calendar date cell to reschedule instantly!
 4. **In-Place Reminder Editing**:

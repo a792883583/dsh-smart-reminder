@@ -72,16 +72,27 @@ export function sendSystemNotification(opts: NotificationOptions): Promise<boole
         })
       }
     } else if (currentPlatform === 'win32') {
-      const safeTitle = title.replace(/["`]/g, '')
-      const safeMessage = message.replace(/["`]/g, '')
+      const safeTitle = title.replace(/[<>&"']/g, '')
+      const safeMessage = message.replace(/[<>&"']/g, '')
       const psScript = `
 [Windows.UI.Notifications.ToastNotificationManager, Windows.UI.Notifications, ContentType = WindowsRuntime] > $null
-$template = [Windows.UI.Notifications.ToastNotificationManager]::GetTemplateContent([Windows.UI.Notifications.ToastTemplateType]::ToastText02)
-$textNodes = $template.GetElementsByTagName("text")
-$textNodes.Item(0).AppendChild($template.CreateTextNode("${safeTitle}")) > $null
-$textNodes.Item(1).AppendChild($template.CreateTextNode("${safeMessage}")) > $null
-$toast = [Windows.UI.Notifications.ToastNotification]::new($template)
-[Windows.UI.Notifications.ToastNotificationManager]::CreateToastNotifier("DSH.Reminder").Show($toast)
+[Windows.Data.Xml.Dom.XmlDocument, Windows.Data.Xml.Dom.XmlDocument, ContentType = WindowsRuntime] > $null
+$xml = @"
+<toast scenario="reminder">
+  <visual>
+    <binding template="ToastGeneric">
+      <text>${safeTitle}</text>
+      <text>${safeMessage}</text>
+    </binding>
+  </visual>
+  <audio src="ms-winsoundevent:Notification.Reminder" loop="false"/>
+</toast>
+"@
+$doc = [Windows.Data.Xml.Dom.XmlDocument]::new()
+$doc.LoadXml($xml)
+$toast = [Windows.UI.Notifications.ToastNotification]::new($doc)
+$toast.Priority = [Windows.UI.Notifications.ToastNotificationPriority]::High
+[Windows.UI.Notifications.ToastNotificationManager]::CreateToastNotifier("{1AC14E77-02E7-4E5D-B744-2EB1AE5198B7}\\WindowsPowerShell\\v1.0\\powershell.exe").Show($toast)
 `
       const base64Script = Buffer.from(psScript, 'utf16le').toString('base64')
       exec(`powershell -NoProfile -NonInteractive -EncodedCommand ${base64Script}`, (err) => {
