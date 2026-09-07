@@ -86,15 +86,63 @@ export class ReminderStore {
     return updated
   }
 
-  /** 切换事项完成打勾状态 (Checklist 模式) */
+  /**
+   * 切换事项完成打勾状态 (Checklist 模式)。
+   * 若事项带有周期循环设置（repeat: daily / weekly / monthly），在打勾完成时自动顺延生成下一周期的待办事项。
+   *
+   * @param id 提醒事项唯一 ID
+   * @returns 更新后的提醒事项对象
+   */
   toggleComplete(id: string): ReminderItem | null {
     const existing = this.get(id)
     if (!existing) return null
     const nextStatus = existing.status === 'completed' ? 'pending' : 'completed'
-    return this.update(id, {
+    const updated = this.update(id, {
       status: nextStatus,
       completedAt: nextStatus === 'completed' ? Date.now() : undefined,
     })
+
+    // 周期循环智能流转：当事项被打勾标记完成且配置了周期循环时，自动生成下一个周期的待办事项
+    if (nextStatus === 'completed' && existing.repeat && existing.repeat !== 'none') {
+      const nextDate = new Date(existing.dueAt)
+      if (existing.repeat === 'daily') {
+        nextDate.setDate(nextDate.getDate() + 1)
+      } else if (existing.repeat === 'weekly') {
+        nextDate.setDate(nextDate.getDate() + 7)
+      } else if (existing.repeat === 'monthly') {
+        nextDate.setMonth(nextDate.getMonth() + 1)
+      }
+
+      const nextDueAt = nextDate.getTime()
+      const y = nextDate.getFullYear()
+      const m = String(nextDate.getMonth() + 1).padStart(2, '0')
+      const d = String(nextDate.getDate()).padStart(2, '0')
+      const h = String(nextDate.getHours()).padStart(2, '0')
+      const min = String(nextDate.getMinutes()).padStart(2, '0')
+      const nextDueTimeStr = `${y}-${m}-${d} ${h}:${min}`
+
+      // 避免重复创建：如果已经存在标题相同且到期时间相同的待办，则不重复添加
+      const alreadyExists = this.data.items.some(
+        (i) => i.title === existing.title && i.dueTimeStr === nextDueTimeStr && i.status === 'pending',
+      )
+
+      if (!alreadyExists) {
+        this.add({
+          title: existing.title,
+          description: existing.description,
+          dueAt: nextDueAt,
+          dueTimeStr: nextDueTimeStr,
+          priority: existing.priority,
+          notifySystem: existing.notifySystem,
+          pushPlatform: existing.pushPlatform,
+          pushTarget: existing.pushTarget,
+          repeat: existing.repeat,
+        })
+        console.log('[dsh-smart-reminder] auto rescheduled next repeat item for', nextDueTimeStr)
+      }
+    }
+
+    return updated
   }
 
   /** 一键推迟 (Snooze)：延后指定分钟数并重置为待提醒状态 */

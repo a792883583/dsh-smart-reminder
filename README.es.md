@@ -16,8 +16,12 @@ Plugin universal de recordatorios inteligentes, calendario lunar y lista de tare
 
 ## Características Principales
 
-1. **Acceso Rápido en la Barra Lateral**: Integrado directamente debajo de "Message Gateway" con un icono lineal monocromático alineado a la perfección.
-2. **Notificaciones Nativas del Sistema**:
+1. **Barra de Entrada Rápida en Lenguaje Natural (Quick Add)**:
+   - ⚡ Entrada superior fija de una sola línea. Escriba de forma natural (ej. "Reunión mañana 10am", "Enviar reporte viernes 5pm", "Horno en 30 mins") y presione Enter para crear una tarea al instante con título y hora detectados.
+2. **Tareas Periódicas y Recurrentes Automáticas**:
+   - 🔂 Compatible con repetición Diaria, Semanal y Mensual. Marcar una tarea como completada calcula y programa automáticamente la siguiente instancia sin entrada manual.
+3. **Acceso Rápido en la Barra Lateral**: Integrado directamente debajo de "Message Gateway" con un icono lineal monocromático alineado a la perfección.
+4. **Notificaciones Nativas del Sistema**:
    - 🔔 Integración nativa con los banners del Centro de Notificaciones de macOS junto con el sonido cristalino 'Glass'.
    - 🪟 Compatibilidad total con notificaciones Toast de Windows 10/11 (`scenario="reminder"` + `Priority=High`), con banners flotantes y alertas sonoras incluso con el Asistente de Concentración activo.
 3. **Reprogramación Arrastrar y Soltar (Drag & Drop)**:

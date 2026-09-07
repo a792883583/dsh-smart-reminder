@@ -79,6 +79,16 @@ const DICT: Record<string, Record<Lang, string>> = {
   'filter.completed': { zh: '已完成', en: 'Completed', es: 'Completados' },
   'search.placeholder': { zh: '🔍 搜索提醒标题或备注...', en: '🔍 Search reminders or notes...', es: '🔍 Buscar recordatorios o notas...' },
 
+  // 闪电速记栏 (Quick Add)
+  'quickAdd.placeholder': {
+    zh: '⚡ 闪电速记：输入如「明早10点研发周会」「周五下午5点交周报」「30分钟后看烤箱」，按 Enter 瞬间创建...',
+    en: '⚡ Quick Add: e.g. "Meeting tomorrow 10am", "Submit report Friday 5pm", "Check oven in 30 mins", press Enter...',
+    es: '⚡ Entrada Rápida: ej. "Reunión mañana 10am", "Enviar reporte viernes 5pm", "Horno en 30 mins", presione Enter...',
+  },
+  'quickAdd.badge': { zh: '闪电速记', en: 'Quick Add', es: 'Rápido' },
+  'quickAdd.detected': { zh: '已智能识别时间', en: 'Time Detected', es: 'Hora Detectada' },
+  'quickAdd.success': { zh: '已成功创建待办事项', en: 'Reminder created successfully', es: 'Recordatorio creado con éxito' },
+
   // 优先级
   'priority.label': { zh: '重要程度', en: 'Priority', es: 'Prioridad' },
   'priority.high': { zh: '🔴 高优 (紧急)', en: '🔴 High (Urgent)', es: '🔴 Alta (Urgente)' },

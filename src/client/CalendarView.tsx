@@ -11,6 +11,7 @@
 import { createElement, Fragment, useCallback, useEffect, useMemo, useState } from 'react'
 import type { ReminderItem } from '../core/types.ts'
 import { getLunarInfo } from '../core/lunar.ts'
+import { parseQuickAdd } from '../core/quick-parser.ts'
 import type { ReminderApi } from './api.ts'
 import { CalendarClockIcon } from './icons.tsx'
 import { t, useActiveLang, GLOBAL_SOLAR_FESTIVALS } from './i18n.ts'
@@ -203,6 +204,40 @@ export function CalendarView(props: { api: ReminderApi; onClose: () => void }): 
   } | null>(null)
 
   const [toastMsg, setToastMsg] = useState<{ text: string; showUndo?: boolean } | null>(null)
+  const [quickAddText, setQuickAddText] = useState('')
+  const [quickAddPending, setQuickAddPending] = useState(false)
+
+  // 实时解析闪电速记输入框中的内容，生成预测预览
+  const quickAddParsed = useMemo(() => {
+    if (!quickAddText.trim()) return null
+    return parseQuickAdd(quickAddText)
+  }, [quickAddText])
+
+  const handleQuickAddSubmit = async (e: React.FormEvent) => {
+    e.preventDefault()
+    if (!quickAddText.trim() || quickAddPending) return
+    const parsed = parseQuickAdd(quickAddText)
+    if (!parsed.title || !parsed.dueTimeStr || !parsed.dueAt) return
+
+    setQuickAddPending(true)
+    try {
+      await api.save({
+        title: parsed.title,
+        dueTimeStr: parsed.dueTimeStr,
+        dueAt: parsed.dueAt,
+        priority: 'medium',
+        repeat: 'none',
+        notifySystem: true,
+      })
+      setQuickAddText('')
+      showToast(t('quickAdd.success', lang) + `: ${parsed.title} (${parsed.dueTimeStr})`)
+      await loadItems()
+    } catch (err) {
+      showToast('创建失败 / Failed to create')
+    } finally {
+      setQuickAddPending(false)
+    }
+  }
 
   const loadItems = useCallback(async () => {
     const list = await api.getList()
@@ -633,6 +668,99 @@ export function CalendarView(props: { api: ReminderApi; onClose: () => void }): 
             },
             t('btn.close', lang),
           ),
+        ),
+      ),
+
+      // 顶部常驻：闪电速记栏 (Quick Add Bar)
+      createElement(
+        'form',
+        {
+          onSubmit: handleQuickAddSubmit,
+          style: {
+            padding: '10px 20px',
+            backgroundColor: isDark ? 'rgba(30, 41, 59, 0.7)' : 'rgba(241, 245, 249, 0.85)',
+            borderBottom: `1px solid ${theme.border}`,
+            display: 'flex',
+            alignItems: 'center',
+            gap: '10px',
+            flex: 'none',
+            position: 'relative',
+          },
+        },
+        createElement(
+          'span',
+          {
+            style: {
+              fontSize: '11px',
+              padding: '3px 8px',
+              borderRadius: '4px',
+              backgroundColor: '#3b82f6',
+              color: '#ffffff',
+              fontWeight: 600,
+              letterSpacing: '0.4px',
+              whiteSpace: 'nowrap',
+              flex: 'none',
+            },
+          },
+          t('quickAdd.badge', lang),
+        ),
+        createElement('input', {
+          type: 'text',
+          value: quickAddText,
+          onChange: (e: any) => setQuickAddText(e.target.value),
+          placeholder: t('quickAdd.placeholder', lang),
+          style: {
+            flex: 1,
+            padding: '7px 12px',
+            fontSize: '13px',
+            borderRadius: '6px',
+            border: `1px solid ${theme.border}`,
+            backgroundColor: isDark ? '#0f172a' : '#ffffff',
+            color: theme.textPrimary,
+            outline: 'none',
+            transition: 'border-color 0.15s ease',
+          },
+        }),
+        quickAddParsed && quickAddParsed.title
+          ? createElement(
+              'div',
+              {
+                style: {
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '6px',
+                  fontSize: '11px',
+                  color: isDark ? '#93c5fd' : '#2563eb',
+                  backgroundColor: isDark ? 'rgba(37, 99, 235, 0.2)' : 'rgba(219, 234, 254, 0.8)',
+                  padding: '4px 10px',
+                  borderRadius: '12px',
+                  whiteSpace: 'nowrap',
+                  flex: 'none',
+                },
+              },
+              createElement('span', null, `📌 ${quickAddParsed.title}`),
+              createElement('span', { style: { fontWeight: 600 } }, `⏰ ${quickAddParsed.dueTimeStr}`),
+            )
+          : null,
+        createElement(
+          'button',
+          {
+            type: 'submit',
+            className: 'dsh-btn-smooth',
+            disabled: !quickAddText.trim() || quickAddPending,
+            style: {
+              padding: '6px 14px',
+              borderRadius: '6px',
+              border: 'none',
+              backgroundColor: !quickAddText.trim() ? (isDark ? '#475569' : '#cbd5e1') : '#3b82f6',
+              color: '#ffffff',
+              fontSize: '12px',
+              fontWeight: 600,
+              cursor: !quickAddText.trim() ? 'not-allowed' : 'pointer',
+              flex: 'none',
+            },
+          },
+          'Enter ↵',
         ),
       ),
 
