@@ -1,5 +1,9 @@
 /**
  * 提醒调度器：秒级轮询与事件触发，支持系统级弹窗、离线漏掉提醒补发与多平台推送。
+ * 
+ * 极简通知体验（方案 B）：
+ * - 标题直接展示用户自定义填写的提醒内容（大字醒目突出）；
+ * - 只有当用户填写了详细备注时才展示备注正文，完全去除多余冗长的前后缀与时间字符串。
  * @module dsh-smart-reminder/host/scheduler
  */
 
@@ -52,12 +56,10 @@ export class ReminderScheduler {
       })
     }
 
-    // 发送系统补发汇总横幅
-    const titles = missed.map((m) => `• ${m.title} (${m.dueTimeStr})`).join('\n')
+    const titles = missed.map((m) => m.title).join('\n')
     void sendSystemNotification({
-      title: `⚠️ 补发提醒：您有 ${missed.length} 项离线错过的待办`,
+      title: `⚠️ ${missed.length} 项离线错过的待办`,
       message: titles,
-      subtitle: 'DSH 离线待办补发',
     })
   }
 
@@ -67,18 +69,16 @@ export class ReminderScheduler {
     if (dueList.length === 0) return
 
     for (const item of dueList) {
-      // 标记为触发中，避免重复触发
       this.store.update(item.id, {
         status: 'done',
         triggeredAt: now,
       })
 
-      // 1. 发送系统弹窗通知 (Mac / Win)
+      // 1. 发送极简系统通知 (方案 B：大字直接是事项内容，无冗余副标题)
       if (item.notifySystem !== false) {
         void sendSystemNotification({
-          title: `⏰ 提醒到期：${item.title}`,
-          message: item.description ? `${item.description} (设定时间: ${item.dueTimeStr})` : `设定时间: ${item.dueTimeStr}`,
-          subtitle: 'DSH 智能提醒助手',
+          title: item.title,
+          message: item.description ? item.description : ' ',
         })
       }
 
@@ -103,8 +103,8 @@ export class ReminderScheduler {
           await sendTool.execute({
             platform: item.pushPlatform,
             target: item.pushTarget,
-            title: `⏰ 定时提醒：${item.title}`,
-            message: `**【定时提醒已到期】**\n\n📌 **事项**：${item.title}\n${item.description ? `📝 **备注**：${item.description}\n` : ''}🕒 **原定时间**：${item.dueTimeStr}`,
+            title: `⏰ ${item.title}`,
+            message: `**【定时提醒】**\n\n📌 **${item.title}**${item.description ? `\n📝 ${item.description}` : ''}`,
           })
           console.log('[dsh-smart-reminder] pushed reminder to platform', item.pushPlatform, item.pushTarget)
         }
