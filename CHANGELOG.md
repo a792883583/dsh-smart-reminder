@@ -2,6 +2,12 @@
 
 本文件记录 `dsh-smart-reminder` 的版本变更。格式遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)，版本号遵循 [Semantic Versioning](https://semver.org/lang/zh-CN/)。
 
+## [0.1.29] - 2026-09-17
+
+### Fixed
+
+- **深色模式下侧边栏悬停提示不可见**：`dsh-rem-tip` 误用不存在的 `--dsw-alias-bg-elevated` → 回退为白底，而深色主题的 `--dsw-alias-label-primary` 是浅色，形成「白底 + 浅字」完全看不见。改用官方侧边栏 tooltip token **`--dsw-specific-tip`**（浅色 `#f5f6f7` / 深色 `#353638`）与 `--dsw-alias-label-primary` 正确配对渲染
+
 ## [0.1.28] - 2026-09-16
 
 ### Changed

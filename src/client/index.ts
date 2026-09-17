@@ -59,8 +59,10 @@ const BUTTON_STYLE = `
 .dsh-rem-tip {
   position:fixed; z-index:9999; pointer-events:none; white-space:nowrap;
   padding:4px 8px; border-radius:6px; font-size:12px; line-height:1.4;
-  background:var(--dsw-alias-bg-elevated, #ffffff);
-  color:var(--dsw-alias-label-primary, #111827);
+  /* 侧边栏 tooltip 官方 token：浅色 #f5f6f7（浅底深字）、深色 #353638（深底浅字）。
+     此前误用不存在的 --dsw-alias-bg-elevated → 回退白底，深色模式下不可见。 */
+  background:var(--dsw-specific-tip, #f5f6f7);
+  color:var(--dsw-alias-label-primary, #0f1115);
   border:1px solid var(--dsw-alias-border-l4, rgba(128,128,128,0.28));
   box-shadow:0 4px 12px rgba(0,0,0,0.12);
 }
