@@ -2,6 +2,22 @@
 
 本文件记录 `dsh-smart-reminder` 的版本变更。格式遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)，版本号遵循 [Semantic Versioning](https://semver.org/lang/zh-CN/)。
 
+## [0.1.28] - 2026-09-16
+
+### Changed
+
+- **入口位置迁移**：侧边栏入口从「消息平台」下方移到「工作区」行、**紧贴搜索图标左侧**，与官方的搜索/视图/添加图标排成一行，不再单独占一行
+  - 宽栏对齐官方 `searchButton` 规格：28×28 圆形、`--dsw-alias-label-secondary` 色、hover 用 `--dsw-alias-interactive-bg-hover`
+  - 侧边栏收起（rail）对齐官方规格：36×36 圆形、`--dsw-alias-label-primary` 色、18px 图标、下边距 12px
+  - 宽栏 ↔ 收起 切换时按 `nextElementSibling` 每秒校验并按当前锚点重挂（rail 模式下官方不渲染 `searchSlot`，锚点会变）
+- **新增悬停提示**：补上样式化 tooltip（portal 渲染到 `body`，绕开 `sectionHeader` 的 `overflow:hidden` 裁剪），与官方图标的提示观感一致；宽栏在按钮下方居中、收起态在按钮右侧垂直居中
+
+### Fixed
+
+- **中文数字时间无法识别**：`zhTimeMatch` 只匹配阿拉伯数字，导致「下午三点提醒我开会」中的「三点」无法解析，整句退回到兜底逻辑（明天 09:00）；「今天下午三点」则会算成 22:00
+  - 现支持中文数字（三点 / 三点半 / 十点 / 十二点半 / 二十点 等），新增 `cnToInt()` 转换函数
+  - 回归：`下午三点` → 今天 15:00、`下午三点半` → 今天 15:30、`晚上七点` → 19:00、`周五下午三点` → 本周五 15:00
+
 ## [0.1.24] - 2026-09-04
 
 ### Fixed

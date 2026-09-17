@@ -20,7 +20,7 @@ Universal calendar reminder, lunar calendar dashboard, and to-do checklist plugi
    - ⚡ Prominently featured top single-line input. Type naturally (e.g. "Team sync tomorrow 10am", "Submit report Friday 5pm", "Check oven in 30 mins") and hit Enter to immediately create a task with extracted title and precise due time!
 2. **Automated Recurring Tasks**:
    - 🔂 Supports Daily, Weekly, and Monthly cycles. Checking off a task as completed automatically rolls forward and schedules the next recurring instance without manual entry.
-3. **Seamless Sidebar Navigation**: Embedded right below "Message Gateway" with an official monochrome outline icon.
+3. **Seamless Sidebar Navigation**: Sits in the "Workspaces" row, immediately left of the search icon and in line with the official search / view / add buttons; matches the official 28px (wide) and 36px (collapsed rail) circular icon specs, with a styled hover tooltip.
 4. **Native Desktop Banners**:
    - 🔔 Deeply integrated with macOS native notification center banners paired with the crisp 'Glass' chime.
    - 🪟 Full Windows 10/11 Toast Notification support (`scenario="reminder"` + `Priority=High`), providing instant popup banners and sound alerts even when Focus Assist (Priority Only) is active.

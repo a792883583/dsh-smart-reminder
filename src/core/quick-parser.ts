@@ -56,6 +56,25 @@ export function parseQuickAdd(input: string, baseDate: Date = new Date()): Parse
   let matchedTimeText = ''
   let timeDetected = false
 
+  /** 中文时间数字（一到二十三 + 两）转阿拉伯数字。解析失败返回 NaN。 */
+  function cnToInt(text: string): number {
+    if (/^\d+$/.test(text)) return parseInt(text, 10)
+    if (text === '两') return 2
+    if (text === '十') return 10
+    const m = text.match(/^(二十([一二三四])?)|(十[一二三四五六七八九]?)?$|^十$/)
+    if (m !== null) {
+      if (text === '二十') return 20
+      if (text.length === 3 && text.startsWith('二十')) return 20 + (text[2] === '一' ? 1 : text[2] === '二' ? 2 : text[2] === '三' ? 3 : 4)
+      if (text.length === 2 && text.startsWith('十')) {
+        const c = text[1]
+        return c === '一' ? 11 : c === '二' ? 12 : c === '三' ? 13 : c === '四' ? 14 : c === '五' ? 15 : c === '六' ? 16 : c === '七' ? 17 : c === '八' ? 18 : 19
+      }
+    }
+    const single: Record<string, number> = { 一: 1, 二: 2, 三: 3, 四: 4, 五: 5, 六: 6, 七: 7, 八: 8, 九: 9, 十: 10 }
+    if (single[text] !== undefined) return single[text]
+    return NaN
+  }
+
   // --------------------------------------------------------------------------
   // 1. 相对时长模式（如：30分钟后、2小时后、半小时后、in 30 mins、en 2 horas）
   // --------------------------------------------------------------------------
@@ -194,8 +213,12 @@ export function parseQuickAdd(input: string, baseDate: Date = new Date()): Parse
 
     // 匹配 "14:30" 或 "9:00"
     const colonTimeMatch = workingTitle.match(/\b(\d{1,2}):(\d{2})\b/)
-    // 匹配 "10点"、"10点半"、"10点45分"、"10点一刻"
-    const zhTimeMatch = workingTitle.match(/(\d{1,2})\s*(?:点|时)\s*(?:(?:半|一刻)|(\d{1,2})\s*(?:分)?)?/)
+    // 匹配 "10点"、"10点半"、"10点45分"、"10点一刻"，以及中文数字 "三点"、"三点半"。
+    // 不识别中文数字会漏掉「下午三点提醒我开会」一类常见写法——
+    // 时段修正也就跟着失效，整句回退到 fallback（明天 09:00），体感像是「乱跳」。
+    const zhTimeMatch = workingTitle.match(
+      /(\d{1,2}|[一二两三四五六七八九十]+)\s*(?:点|时)\s*(?:(?:半|一刻)|(\d{1,2})\s*(?:分)?)?/,
+    )
     // 匹配 "3pm"、"11am"
     const enAmPmMatch = workingTitle.match(/\b(\d{1,2})(?::(\d{2}))?\s*(am|pm)\b/i)
 
@@ -206,7 +229,9 @@ export function parseQuickAdd(input: string, baseDate: Date = new Date()): Parse
       matchedTimeText += ` ${colonTimeMatch[0]}`
       workingTitle = workingTitle.replace(colonTimeMatch[0], ' ')
     } else if (zhTimeMatch && zhTimeMatch[0]) {
-      hour = parseInt(zhTimeMatch[1], 10)
+      // zhTimeMatch[1] 可能是阿拉伯数字或中文数字（如「三点」「三」「三点半」）。
+      const hourStr = zhTimeMatch[1]
+      hour = /^\d+$/.test(hourStr) ? parseInt(hourStr, 10) : cnToInt(hourStr)
       if (zhTimeMatch[0].includes('半')) {
         minute = 30
       } else if (zhTimeMatch[0].includes('一刻')) {
